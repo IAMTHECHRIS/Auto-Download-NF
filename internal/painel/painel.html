@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Painel — Coletor de Notas Fiscais</title>
+<style>
+  :root {
+    --bg: #0f1420;
+    --card: #171d2e;
+    --border: #2a3352;
+    --text: #e8ecf7;
+    --muted: #8b93ab;
+    --accent: #4f7cff;
+    --accent-hover: #6690ff;
+    --ok: #3ecf8e;
+    --warn: #f5a623;
+    --erro: #ff6b6b;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  header {
+    padding: 18px 24px 14px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+  h1 { font-size: 17px; margin: 0 0 2px; font-weight: 600; }
+  .subtitle { font-size: 12px; color: var(--muted); }
+  .barra {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+  input[type=text] {
+    flex: 1;
+    min-width: 180px;
+    padding: 9px 12px;
+    background: #0d1220;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    outline: none;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  input[type=text]:focus { border-color: var(--accent); }
+  button {
+    padding: 9px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    border: 1px solid var(--border);
+  }
+  .btn-principal {
+    background: var(--accent);
+    border: none;
+    color: white;
+    font-weight: 600;
+  }
+  .btn-principal:hover { background: var(--accent-hover); }
+  .btn-principal:disabled { opacity: 0.5; cursor: default; }
+  .btn-secundario {
+    background: #232b45;
+    color: var(--text);
+  }
+  .btn-secundario:hover { background: #2b3454; }
+  .btn-link {
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 12px;
+    text-decoration: underline;
+    padding: 4px 6px;
+  }
+  .btn-link:hover { color: var(--text); }
+  #status-busca {
+    font-size: 12px;
+    color: var(--muted);
+    min-width: 160px;
+  }
+  #status-busca.ok { color: var(--ok); }
+  #status-busca.erro { color: var(--erro); }
+  main { flex: 1; overflow: auto; padding: 0 24px 20px; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--bg);
+    text-align: left;
+    padding: 10px 8px;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+  }
+  tbody td {
+    padding: 9px 8px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  tbody tr:hover { background: rgba(255,255,255,0.02); }
+  .tag {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 5px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #232b45;
+    color: var(--muted);
+  }
+  .tag.cancelado { background: rgba(255,107,107,0.15); color: var(--erro); }
+  .valor { text-align: right; white-space: nowrap; }
+  .vazio {
+    text-align: center;
+    color: var(--muted);
+    padding: 60px 20px;
+    font-size: 13px;
+  }
+  footer {
+    padding: 10px 24px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  #contagem { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>Coletor de Notas Fiscais</h1>
+      <div class="subtitle">Painel — o que já foi baixado</div>
+    </div>
+    <button class="btn-link" onclick="reconfigurar()">Reconfigurar…</button>
+  </header>
+
+  <div class="barra">
+    <input type="text" id="busca" placeholder="Buscar por fornecedor, número ou tipo..." oninput="renderizar()">
+    <span id="status-busca"></span>
+    <button class="btn-principal" id="btnBuscar" onclick="buscarAgora()">Buscar notas agora</button>
+  </div>
+
+  <main>
+    <table id="tabela">
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Tipo</th>
+          <th>Fornecedor</th>
+          <th>Número</th>
+          <th class="valor">Valor</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="corpo"></tbody>
+    </table>
+    <div class="vazio" id="vazio" style="display:none">Nenhuma nota ainda. Clique em "Buscar notas agora".</div>
+  </main>
+
+  <footer>
+    <span id="contagem"></span>
+  </footer>
+
+<script>
+let entradas = [];
+
+function formatarValor(v) {
+  return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function formatarData(iso) {
+  if (!iso) return '';
+  const [ano, mes, dia] = iso.substring(0, 10).split('-');
+  return `${dia}/${mes}/${ano}`;
+}
+
+function renderizar() {
+  const filtro = document.getElementById('busca').value.trim().toLowerCase();
+  const corpo = document.getElementById('corpo');
+  const vazio = document.getElementById('vazio');
+  const tabela = document.getElementById('tabela');
+
+  const filtradas = !filtro ? entradas : entradas.filter(e =>
+    (e.fornecedor || '').toLowerCase().includes(filtro) ||
+    (e.numero || '').toLowerCase().includes(filtro) ||
+    (e.tipo || '').toLowerCase().includes(filtro)
+  );
+
+  corpo.innerHTML = '';
+  if (filtradas.length === 0) {
+    tabela.style.display = 'none';
+    vazio.style.display = 'block';
+    vazio.textContent = entradas.length === 0
+      ? 'Nenhuma nota ainda. Clique em "Buscar notas agora".'
+      : 'Nada encontrado pra essa busca.';
+  } else {
+    tabela.style.display = 'table';
+    vazio.style.display = 'none';
+    for (const e of filtradas) {
+      const tr = document.createElement('tr');
+      const cancelado = (e.status || '').toUpperCase().includes('CANCELADO');
+      tr.innerHTML = `
+        <td>${formatarData(e.data)}</td>
+        <td><span class="tag">${e.tipo || ''}</span></td>
+        <td>${e.fornecedor || ''}</td>
+        <td>${e.numero || ''}</td>
+        <td class="valor">${formatarValor(e.valor || 0)}</td>
+        <td>${e.status ? `<span class="tag ${cancelado ? 'cancelado' : ''}">${e.status}</span>` : ''}</td>
+        <td><button class="btn-secundario" data-caminho="${encodeURIComponent(e.caminho || '')}" onclick="abrir(this)">Abrir pasta</button></td>
+      `;
+      corpo.appendChild(tr);
+    }
+  }
+
+  document.getElementById('contagem').textContent =
+    entradas.length + (entradas.length === 1 ? ' nota registrada' : ' notas registradas');
+}
+
+function abrir(btn) {
+  const caminho = decodeURIComponent(btn.getAttribute('data-caminho'));
+  if (caminho) window.abrirPasta(caminho);
+}
+
+async function carregarCatalogo() {
+  const resultado = await window.listarCatalogo();
+  const r = JSON.parse(resultado);
+  entradas = (r.ok && r.entradas) ? r.entradas : [];
+  renderizar();
+}
+
+async function buscarAgora() {
+  const btn = document.getElementById('btnBuscar');
+  const status = document.getElementById('status-busca');
+  btn.disabled = true;
+  status.className = '';
+  status.textContent = 'Buscando notas novas...';
+
+  const resultado = await window.buscarAgora();
+  const r = JSON.parse(resultado);
+
+  await carregarCatalogo();
+
+  if (r.ok) {
+    status.className = 'ok';
+    status.textContent = 'Atualizado.';
+  } else {
+    status.className = 'erro';
+    status.textContent = (r.erros || ['Erro ao buscar.']).join(' | ');
+  }
+  btn.disabled = false;
+}
+
+function reconfigurar() {
+  if (confirm('Isso vai apagar a configuração atual (certificado, pasta, CNPJ) e abrir o assistente de configuração de novo. As notas já baixadas continuam salvas. Confirma?')) {
+    window.reconfigurar();
+  }
+}
+
+carregarCatalogo();
+buscarAgora();
+</script>
+</body>
+</html>

@@ -34,7 +34,11 @@ func EnsureDailyTask(horario string) error {
 		"/Create",
 		"/SC", "DAILY",
 		"/TN", nomeTarefa,
-		"/TR", fmt.Sprintf(`"%s"`, exe),
+		// --agendado diz pro cmd/coletor que essa execução é automática, sem
+		// ninguém na frente do computador — roda só a coleta, sem abrir o
+		// painel gráfico. Sem essa flag, o Windows tentaria mostrar uma
+		// janela às 08h da manhã sem motivo.
+		"/TR", fmt.Sprintf(`"%s" --agendado`, exe),
 		"/ST", horario,
 		"/F", // sobrescreve sem perguntar, se por algum motivo já existir mas existeTarefa() não pegou
 	)

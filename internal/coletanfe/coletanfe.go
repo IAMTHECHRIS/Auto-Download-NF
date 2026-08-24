@@ -14,6 +14,7 @@ import (
 	"strconv"
 
 	"sieg-automation/internal/appconfig"
+	"sieg-automation/internal/catalogo"
 	"sieg-automation/internal/document"
 	"sieg-automation/internal/nfedist"
 	"sieg-automation/internal/organizer"
@@ -102,6 +103,9 @@ func Run(cfg appconfig.Config) error {
 					continue
 				}
 				processadas[doc.Chave] = registro{caminho: caminho, doc: doc}
+				if err := catalogo.Registrar(cfg.PastaSaida, doc, caminho); err != nil {
+					log.Printf("[NFe]   NSU %s: aviso ao registrar no catálogo: %v", docZip.NSU, err)
+				}
 				resumos++
 				fmt.Printf("[NFe]   NSU %s [resNFe] -> %s\n", docZip.NSU, caminho)
 
@@ -123,6 +127,9 @@ func Run(cfg appconfig.Config) error {
 					continue
 				}
 				processadas[doc.Chave] = registro{caminho: caminho, doc: doc}
+				if err := catalogo.Registrar(cfg.PastaSaida, doc, caminho); err != nil {
+					log.Printf("[NFe]   NSU %s: aviso ao registrar no catálogo: %v", docZip.NSU, err)
+				}
 				resumos++
 				fmt.Printf("[NFe]   NSU %s [procNFe completo] -> %s\n", docZip.NSU, caminho)
 
@@ -151,6 +158,9 @@ func Run(cfg appconfig.Config) error {
 					reg.caminho = novoCaminho
 					reg.doc.Status = "CANCELADO"
 					processadas[ev.ChaveOriginal] = reg
+					if err := catalogo.Registrar(cfg.PastaSaida, reg.doc, reg.caminho); err != nil {
+						log.Printf("[NFe]   NSU %s: aviso ao registrar cancelamento no catálogo: %v", docZip.NSU, err)
+					}
 					cancelamentos++
 					fmt.Printf("[NFe]   NSU %s [CANCELAMENTO] renomeado -> %s\n", docZip.NSU, novoCaminho)
 				} else {

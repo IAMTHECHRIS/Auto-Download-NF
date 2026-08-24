@@ -47,6 +47,12 @@ func configPath() string {
 	return filepath.Join(wd, "config.json")
 }
 
+// CaminhoArquivo expõe o caminho do config.json pra quem precisar apagá-lo
+// de propósito (ex: botão "Reconfigurar" do painel).
+func CaminhoArquivo() string {
+	return configPath()
+}
+
 // Load lê o config.json ao lado do executável. Se não existir, roda o
 // assistente interativo (Setup) e salva antes de devolver.
 func Load() (Config, error) {
