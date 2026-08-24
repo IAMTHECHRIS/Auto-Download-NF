@@ -8,6 +8,7 @@ package certload
 
 import (
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"os"
 	"time"
@@ -26,7 +27,10 @@ func FromPFX(caminhoPfx, senha string) (tls.Certificate, error) {
 
 	chave, cert, err := pkcs12.Decode(raw, senha)
 	if err != nil {
-		return tls.Certificate{}, fmt.Errorf("decodificar pfx (senha errada?): %w", err)
+		if errors.Is(err, pkcs12.ErrIncorrectPassword) {
+			return tls.Certificate{}, errors.New("senha do certificado incorreta")
+		}
+		return tls.Certificate{}, fmt.Errorf("não consegui ler o certificado: %w", err)
 	}
 
 	return tls.Certificate{

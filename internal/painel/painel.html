@@ -28,28 +28,14 @@
     -webkit-user-select: none;
     user-select: none;
   }
-  header {
-    padding: 16px 24px 0;
-    border-bottom: 1px solid var(--border);
-  }
-  .header-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 16px;
-    padding-bottom: 14px;
-  }
+  header { padding: 16px 24px 0; border-bottom: 1px solid var(--border); }
+  .header-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-bottom: 14px; }
   h1 { font-size: 17px; margin: 0 0 2px; font-weight: 600; }
   .subtitle { font-size: 12px; color: var(--muted); }
   nav.abas { display: flex; gap: 4px; }
   nav.abas button {
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    color: var(--muted);
-    font-size: 13px;
-    padding: 9px 14px;
-    cursor: pointer;
+    background: transparent; border: none; border-bottom: 2px solid transparent;
+    color: var(--muted); font-size: 13px; padding: 9px 14px; cursor: pointer;
   }
   nav.abas button:hover { color: var(--text); }
   nav.abas button.ativa { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
@@ -57,83 +43,57 @@
   section.aba { display: none; flex: 1; min-height: 0; flex-direction: column; }
   section.aba.ativa { display: flex; }
 
-  .barra {
-    display: flex;
-    gap: 10px;
-    align-items: center;
-    padding: 14px 24px;
-    border-bottom: 1px solid var(--border);
-    flex-wrap: wrap;
-  }
+  .barra { display: flex; gap: 10px; align-items: center; padding: 12px 24px; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
   input[type=text], input[type=password], select {
-    padding: 9px 12px;
-    background: #0d1220;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    color: var(--text);
-    font-size: 13px;
-    outline: none;
-    -webkit-user-select: text;
-    user-select: text;
+    padding: 9px 12px; background: #0d1220; border: 1px solid var(--border); border-radius: 8px;
+    color: var(--text); font-size: 13px; outline: none; -webkit-user-select: text; user-select: text;
   }
   input[type=text]:focus, input[type=password]:focus, select:focus { border-color: var(--accent); }
-  .barra input[type=text] { flex: 1; min-width: 180px; }
+  .barra input[type=text] { flex: 1; min-width: 160px; }
   button {
-    padding: 9px 14px;
-    border-radius: 8px;
-    font-size: 13px;
-    cursor: pointer;
-    white-space: nowrap;
-    border: 1px solid var(--border);
+    padding: 9px 14px; border-radius: 8px; font-size: 13px; cursor: pointer;
+    white-space: nowrap; border: 1px solid var(--border);
   }
-  .btn-principal {
-    background: var(--accent);
-    border: none;
-    color: white;
-    font-weight: 600;
-  }
+  .btn-principal { background: var(--accent); border: none; color: white; font-weight: 600; }
   .btn-principal:hover { background: var(--accent-hover); }
   .btn-principal:disabled { opacity: 0.5; cursor: default; }
   .btn-secundario { background: #232b45; color: var(--text); }
   .btn-secundario:hover { background: #2b3454; }
-  .btn-link {
-    background: transparent;
-    border: none;
-    color: var(--muted);
-    font-size: 12px;
-    text-decoration: underline;
-    padding: 4px 6px;
-  }
+  .btn-link { background: transparent; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; padding: 4px 6px; }
   .btn-link:hover { color: var(--text); }
-  #status-busca { font-size: 12px; color: var(--muted); min-width: 160px; }
+
+  .toggle {
+    display: flex; align-items: center; gap: 7px; cursor: pointer;
+    padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 12.5px;
+  }
+  .toggle .bolinha { width: 9px; height: 9px; border-radius: 50%; background: var(--erro); }
+  .toggle.ligado .bolinha { background: var(--ok); }
+  .toggle .rotulo { color: var(--muted); }
+
+  #status-busca { font-size: 12px; color: var(--muted); }
   #status-busca.ok { color: var(--ok); }
   #status-busca.erro { color: var(--erro); }
 
   main { flex: 1; overflow: auto; padding: 0 24px 20px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th {
-    position: sticky; top: 0; background: var(--bg);
-    text-align: left; padding: 10px 8px; font-size: 11px;
-    text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted);
-    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; background: var(--bg); text-align: left; padding: 10px 8px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted);
+    border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap;
   }
+  thead th:hover { color: var(--text); }
+  thead th .seta { opacity: 0.5; font-size: 10px; }
   tbody td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
   tbody tr:hover { background: rgba(255,255,255,0.02); }
-  .tag {
-    display: inline-block; padding: 2px 7px; border-radius: 5px;
-    font-size: 11px; font-weight: 600; background: #232b45; color: var(--muted);
-  }
+  .tag { display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; background: #232b45; color: var(--muted); }
   .tag.cancelado { background: rgba(255,107,107,0.15); color: var(--erro); }
   .valor { text-align: right; white-space: nowrap; }
   .vazio { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 13px; }
-  footer {
-    padding: 10px 24px; border-top: 1px solid var(--border);
-    display: flex; justify-content: space-between; align-items: center;
-  }
-  #contagem { font-size: 12px; color: var(--muted); }
+  footer { padding: 10px 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+  footer span { font-size: 12px; color: var(--muted); }
 
-  .painel-conteudo { padding: 22px 24px; max-width: 620px; }
-  .painel-conteudo p.explicacao { font-size: 12.5px; color: var(--muted); margin: 0 0 18px; line-height: 1.5; }
+  .painel-conteudo { padding: 20px 24px; max-width: 620px; }
+  .painel-conteudo p.explicacao { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; line-height: 1.5; }
   .campo { margin-bottom: 16px; }
   .campo label {
     display: block; font-size: 12px; font-weight: 600; color: var(--muted);
@@ -145,10 +105,7 @@
   .status-form { margin-top: 12px; font-size: 12.5px; min-height: 16px; }
   .status-form.ok { color: var(--ok); }
   .status-form.erro { color: var(--erro); }
-  .resultado-item {
-    display: flex; justify-content: space-between; gap: 12px;
-    padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px;
-  }
+  .resultado-item { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .resultado-item .valor2 { text-align: right; }
 </style>
 </head>
@@ -161,44 +118,69 @@
       </div>
     </div>
     <nav class="abas">
-      <button class="ativa" data-aba="notas" onclick="mudarAba('notas')">Notas</button>
+      <button class="ativa" data-aba="entrada" onclick="mudarAba('entrada')">Entrada</button>
+      <button data-aba="saida" onclick="mudarAba('saida')">Saída</button>
       <button data-aba="chave" onclick="mudarAba('chave')">Buscar por chave</button>
       <button data-aba="verificar" onclick="mudarAba('verificar')">Verificar cópia</button>
       <button data-aba="config" onclick="mudarAba('config')">Configuração</button>
     </nav>
   </header>
 
-  <!-- ABA: Notas -->
-  <section class="aba ativa" id="aba-notas">
+  <!-- ABA: Entrada (compras + serviços recebidos) -->
+  <section class="aba ativa" id="aba-entrada">
     <div class="barra">
-      <input type="text" id="busca" placeholder="Buscar por fornecedor, número ou tipo..." oninput="renderizar()">
+      <input type="text" placeholder="Buscar por fornecedor ou número..." oninput="entradaState.texto=this.value; renderizarTabela(entradaState)">
+      <select onchange="entradaState.tipo=this.value; renderizarTabela(entradaState)">
+        <option value="">Todos os tipos</option>
+        <option value="NFEC">NFEC (compra)</option>
+        <option value="NFES">NFES (serviço)</option>
+      </select>
+      <select onchange="entradaState.status=this.value; renderizarTabela(entradaState)">
+        <option value="">Todos os status</option>
+        <option value="normal">Normal</option>
+        <option value="CANCELADO">Cancelado</option>
+      </select>
+      <div class="toggle" id="toggleBusca" onclick="clicarToggleBusca()">
+        <span class="bolinha"></span><span class="rotulo">Busca automática ao abrir</span>
+      </div>
       <span id="status-busca"></span>
       <button class="btn-principal" id="btnBuscar" onclick="clicarBuscarAgora()">Buscar notas agora</button>
     </div>
     <main>
-      <table id="tabela">
-        <thead>
-          <tr>
-            <th>Data</th><th>Tipo</th><th>Fornecedor</th><th>Número</th>
-            <th class="valor">Valor</th><th>Status</th><th></th>
-          </tr>
-        </thead>
-        <tbody id="corpo"></tbody>
-      </table>
-      <div class="vazio" id="vazio" style="display:none">Nenhuma nota ainda. Clique em "Buscar notas agora".</div>
+      <table id="tabela-entrada"></table>
+      <div class="vazio" id="vazio-entrada" style="display:none"></div>
     </main>
-    <footer><span id="contagem"></span></footer>
+    <footer><span id="contagem-entrada"></span></footer>
+  </section>
+
+  <!-- ABA: Saída (só o que a empresa emitiu) -->
+  <section class="aba" id="aba-saida">
+    <div class="barra">
+      <input type="text" placeholder="Buscar por tomador ou número..." oninput="saidaState.texto=this.value; renderizarTabela(saidaState)">
+      <select onchange="saidaState.status=this.value; renderizarTabela(saidaState)">
+        <option value="">Todos os status</option>
+        <option value="normal">Normal</option>
+        <option value="CANCELADO">Cancelado</option>
+      </select>
+      <div class="toggle" id="toggleBusca2" onclick="clicarToggleBusca()">
+        <span class="bolinha"></span><span class="rotulo">Busca automática ao abrir</span>
+      </div>
+      <span id="status-busca2"></span>
+      <button class="btn-principal" onclick="clicarBuscarAgora()">Buscar notas agora</button>
+    </div>
+    <main>
+      <table id="tabela-saida"></table>
+      <div class="vazio" id="vazio-saida" style="display:none"></div>
+    </main>
+    <footer><span id="contagem-saida"></span></footer>
   </section>
 
   <!-- ABA: Buscar por chave -->
   <section class="aba" id="aba-chave">
     <div class="painel-conteudo">
       <p class="explicacao">
-        Apagou um XML sem querer? Cole a chave de acesso (44 dígitos) da nota
-        pra pedir ela de novo pra SEFAZ, sem mexer na busca automática diária.
-        Evite fazer isso em lote — a SEFAZ pode limitar quantas consultas
-        avulsas como essa são permitidas por dia (não temos esse número
-        confirmado), então use com moderação.
+        Apagou um XML sem querer? Cole a chave (44 dígitos) pra pedir essa
+        nota de novo pra SEFAZ. Use com moderação — evite colar várias seguidas.
       </p>
       <div class="campo">
         <label>Chave de acesso (44 dígitos)</label>
@@ -213,21 +195,17 @@
   <section class="aba" id="aba-verificar">
     <div class="painel-conteudo" style="max-width: 100%;">
       <p class="explicacao">
-        Compara tudo que já foi baixado com o que existe dentro da <strong>pasta
-        de destino</strong> (configurada na aba Configuração — normalmente a
-        pasta do Google Drive). O que aparecer aqui embaixo é o que ainda não
-        foi encontrado lá. Se o seu processo é copiar manualmente pra lá depois
-        de conferir, é normal essa lista ter itens — são só os que ainda não
-        foram copiados, não necessariamente perdidos. A comparação é só pelo
-        NOME do arquivo, procurando dentro de TODAS as subpastas da pasta de
-        destino — não importa em que ANO/MES ele esteja organizado lá.
-        Só entram nessa comparação notas que ESTE programa baixou (o que
-        está no catálogo) — arquivos antigos organizados manualmente antes,
-        de anos que este programa nunca buscou, não aparecem aqui (não tem
-        como comparar o que a gente nunca soube que existia).
+        Escolha uma pasta (ex: a do Google Drive) e compara com o que já foi
+        baixado — mostra o que ainda não está lá dentro.
       </p>
-      <p class="explicacao" id="pastaDestinoAtual" style="font-weight:600; color:var(--text);"></p>
-      <button class="btn-principal" onclick="clicarVerificarCopia()">Verificar agora</button>
+      <div class="campo">
+        <label>Pasta a verificar</label>
+        <div class="row">
+          <input type="text" id="pastaVerificar" placeholder="Nenhuma pasta selecionada" readonly>
+          <button class="btn-secundario" onclick="clicarEscolherPastaVerificar()">Procurar…</button>
+        </div>
+      </div>
+      <button class="btn-principal" id="btnVerificar" onclick="clicarVerificarCopia()" disabled>Verificar agora</button>
       <div class="status-form" id="status-verificar"></div>
       <div id="resultado-verificar" style="margin-top: 16px;"></div>
     </div>
@@ -236,11 +214,7 @@
   <!-- ABA: Configuração -->
   <section class="aba" id="aba-config">
     <div class="painel-conteudo">
-      <p class="explicacao">
-        Muda aqui quando precisar: certificado vencido, CNPJ, estado, ou as
-        pastas usadas. Notas já baixadas continuam onde estão — mudar a pasta
-        de saída só vale pras próximas coletas.
-      </p>
+      <p class="explicacao">Certificado vencido, CNPJ, estado ou pastas — muda aqui, sem refazer tudo.</p>
 
       <div class="campo">
         <label>CNPJ da empresa</label>
@@ -262,7 +236,7 @@
           <option value="33">Rio de Janeiro</option><option value="24">Rio Grande do Norte</option>
           <option value="43">Rio Grande do Sul</option><option value="11">Rondônia</option>
           <option value="14">Roraima</option><option value="42">Santa Catarina</option>
-          <option value="35">São Paulo</option><option value="28">Sergipe</option>
+          <option value="35" selected>São Paulo</option><option value="28">Sergipe</option>
           <option value="17">Tocantins</option>
         </select>
       </div>
@@ -271,7 +245,7 @@
         <label>Certificado digital (.pfx)</label>
         <div class="row">
           <input type="text" id="cfgPfx" readonly>
-          <button class="btn-secundario" onclick="escolherCfgPfx()">Procurar…</button>
+          <button class="btn-secundario" onclick="clicarEscolherCfgPfx()">Procurar…</button>
         </div>
       </div>
 
@@ -284,15 +258,7 @@
         <label>Pasta onde as notas são salvas</label>
         <div class="row">
           <input type="text" id="cfgPastaSaida" readonly>
-          <button class="btn-secundario" onclick="escolherCfgPastaSaida()">Procurar…</button>
-        </div>
-      </div>
-
-      <div class="campo">
-        <label>Pasta de destino (opcional — pra aba "Verificar cópia")</label>
-        <div class="row">
-          <input type="text" id="cfgPastaDestino" placeholder="Nenhuma selecionada" readonly>
-          <button class="btn-secundario" onclick="escolherCfgPastaDestino()">Procurar…</button>
+          <button class="btn-secundario" onclick="clicarEscolherCfgPastaSaida()">Procurar…</button>
         </div>
       </div>
 
@@ -303,13 +269,33 @@
   </section>
 
 <script>
-let entradas = [];
+// NOMES DE FUNÇÃO JS ABAIXO SÃO DE PROPÓSITO DIFERENTES dos nomes
+// registrados no Go (window.buscarAgora, window.verificarCopia, etc). Uma
+// function declaration global com o MESMO nome de um bind sobrescreve a
+// ponte pro Go e passa a chamar a si mesma pra sempre, sem nunca sair do
+// JavaScript. Já aconteceu duas vezes nessa mesma tela — não repetir.
+
+let todasEntradas = [];
+let pastaVerificarEscolhida = '';
+let buscaAutomatica = false;
+
+const entradaState = { texto: '', tipo: '', status: '', ordenarPor: 'data', ordemAsc: false };
+const saidaState   = { texto: '', tipo: '', status: '', ordenarPor: 'data', ordemAsc: false };
+
+const COLUNAS = [
+  { chave: 'data', rotulo: 'Data' },
+  { chave: 'tipo', rotulo: 'Tipo' },
+  { chave: 'fornecedor', rotulo: 'Fornecedor' },
+  { chave: 'numero', rotulo: 'Número' },
+  { chave: 'valor', rotulo: 'Valor' },
+  { chave: 'status', rotulo: 'Status' },
+  { chave: '', rotulo: '' },
+];
 
 function mudarAba(nome) {
   document.querySelectorAll('nav.abas button').forEach(b => b.classList.toggle('ativa', b.dataset.aba === nome));
   document.querySelectorAll('section.aba').forEach(s => s.classList.toggle('ativa', s.id === 'aba-' + nome));
   if (nome === 'config') atualizarFormConfiguracao();
-  if (nome === 'verificar') mostrarPastaDestinoAtual();
 }
 
 function formatarValor(v) {
@@ -321,31 +307,70 @@ function formatarData(iso) {
   return `${dia}/${mes}/${ano}`;
 }
 
-function renderizar() {
-  const filtro = document.getElementById('busca').value.trim().toLowerCase();
-  const corpo = document.getElementById('corpo');
-  const vazio = document.getElementById('vazio');
-  const tabela = document.getElementById('tabela');
+function abrir(caminho) {
+  if (caminho) window.abrirPasta(caminho);
+}
 
-  const filtradas = !filtro ? entradas : entradas.filter(e =>
-    (e.fornecedor || '').toLowerCase().includes(filtro) ||
-    (e.numero || '').toLowerCase().includes(filtro) ||
-    (e.tipo || '').toLowerCase().includes(filtro)
-  );
+function renderizarTabela(estado) {
+  const ehSaida = estado === saidaState;
+  const sufixo = ehSaida ? 'saida' : 'entrada';
+  const base = ehSaida
+    ? todasEntradas.filter(e => e.tipo === 'NFES-EMITIDA')
+    : todasEntradas.filter(e => e.tipo !== 'NFES-EMITIDA');
 
-  corpo.innerHTML = '';
+  let filtradas = base.filter(e => {
+    if (estado.tipo && e.tipo !== estado.tipo) return false;
+    if (estado.status === 'CANCELADO' && !(e.status || '').toUpperCase().includes('CANCELADO')) return false;
+    if (estado.status === 'normal' && (e.status || '').toUpperCase().includes('CANCELADO')) return false;
+    if (estado.texto) {
+      const t = estado.texto.toLowerCase();
+      if (!(e.fornecedor || '').toLowerCase().includes(t) && !(e.numero || '').toLowerCase().includes(t)) return false;
+    }
+    return true;
+  });
+
+  filtradas.sort((a, b) => {
+    let x = a[estado.ordenarPor], y = b[estado.ordenarPor];
+    if (estado.ordenarPor === 'data') { x = new Date(x); y = new Date(y); }
+    if (x < y) return estado.ordemAsc ? -1 : 1;
+    if (x > y) return estado.ordemAsc ? 1 : -1;
+    return 0;
+  });
+
+  const tabela = document.getElementById('tabela-' + sufixo);
+  const vazio = document.getElementById('vazio-' + sufixo);
+
   if (filtradas.length === 0) {
     tabela.style.display = 'none';
     vazio.style.display = 'block';
-    vazio.textContent = entradas.length === 0
+    vazio.textContent = base.length === 0
       ? 'Nenhuma nota ainda. Clique em "Buscar notas agora".'
-      : 'Nada encontrado pra essa busca.';
+      : 'Nada encontrado com esses filtros.';
   } else {
     tabela.style.display = 'table';
     vazio.style.display = 'none';
+
+    const thead = document.createElement('thead');
+    const trh = document.createElement('tr');
+    for (const col of COLUNAS) {
+      const th = document.createElement('th');
+      if (col.chave) {
+        const seta = estado.ordenarPor === col.chave ? (estado.ordemAsc ? '▲' : '▼') : '';
+        th.innerHTML = col.rotulo + ' <span class="seta">' + seta + '</span>';
+        th.onclick = () => {
+          if (estado.ordenarPor === col.chave) estado.ordemAsc = !estado.ordemAsc;
+          else { estado.ordenarPor = col.chave; estado.ordemAsc = false; }
+          renderizarTabela(estado);
+        };
+      }
+      trh.appendChild(th);
+    }
+    thead.appendChild(trh);
+
+    const tbody = document.createElement('tbody');
     for (const e of filtradas) {
-      const tr = document.createElement('tr');
       const cancelado = (e.status || '').toUpperCase().includes('CANCELADO');
+      const tr = document.createElement('tr');
       tr.innerHTML = `
         <td>${formatarData(e.data)}</td>
         <td><span class="tag">${e.tipo || ''}</span></td>
@@ -353,53 +378,63 @@ function renderizar() {
         <td>${e.numero || ''}</td>
         <td class="valor">${formatarValor(e.valor || 0)}</td>
         <td>${e.status ? `<span class="tag ${cancelado ? 'cancelado' : ''}">${e.status}</span>` : ''}</td>
-        <td><button class="btn-secundario" data-caminho="${encodeURIComponent(e.caminho || '')}" onclick="abrir(this)">Abrir pasta</button></td>
+        <td></td>
       `;
-      corpo.appendChild(tr);
+      const btn = document.createElement('button');
+      btn.className = 'btn-secundario';
+      btn.textContent = 'Abrir pasta';
+      btn.onclick = () => abrir(e.caminho);
+      tr.lastElementChild.appendChild(btn);
+      tbody.appendChild(tr);
     }
+
+    tabela.innerHTML = '';
+    tabela.appendChild(thead);
+    tabela.appendChild(tbody);
   }
 
-  document.getElementById('contagem').textContent =
-    entradas.length + (entradas.length === 1 ? ' nota registrada' : ' notas registradas');
-}
-
-function abrir(btn) {
-  const caminho = decodeURIComponent(btn.getAttribute('data-caminho'));
-  if (caminho) window.abrirPasta(caminho);
+  document.getElementById('contagem-' + sufixo).textContent =
+    filtradas.length + (filtradas.length === 1 ? ' nota' : ' notas') +
+    (filtradas.length !== base.length ? ' (de ' + base.length + ')' : '');
 }
 
 async function carregarCatalogo() {
   const resultado = await window.listarCatalogo();
   const r = JSON.parse(resultado);
-  entradas = (r.ok && r.entradas) ? r.entradas : [];
-  renderizar();
+  todasEntradas = (r.ok && r.entradas) ? r.entradas : [];
+  renderizarTabela(entradaState);
+  renderizarTabela(saidaState);
 }
 
-// NOMES DAS FUNÇÕES JS ABAIXO SÃO DE PROPÓSITO DIFERENTES dos nomes
-// registrados no Go (window.buscarAgora, window.verificarCopia, etc). Uma
-// function declaration global com o MESMO nome de um bind sobrescreve a
-// ponte pro Go — ela passa a chamar a si mesma pra sempre, sem nunca sair
-// do JavaScript. Já caímos nisso antes (ver escolherPasta do instalador) e
-// caiu de novo aqui em 6 lugares até este fix — não repetir esse padrão.
 async function clicarBuscarAgora() {
-  const btn = document.getElementById('btnBuscar');
-  const status = document.getElementById('status-busca');
-  btn.disabled = true;
-  status.className = '';
-  status.textContent = 'Buscando notas novas...';
+  const btns = [document.getElementById('btnBuscar')];
+  const status1 = document.getElementById('status-busca');
+  const status2 = document.getElementById('status-busca2');
+  btns.forEach(b => b.disabled = true);
+  [status1, status2].forEach(s => { s.className = ''; s.textContent = 'Buscando notas novas...'; });
 
   const resultado = await window.buscarAgora();
   const r = JSON.parse(resultado);
   await carregarCatalogo();
 
-  if (r.ok) {
-    status.className = 'ok';
-    status.textContent = 'Atualizado.';
-  } else {
-    status.className = 'erro';
-    status.textContent = (r.erros || ['Erro ao buscar.']).join(' | ');
-  }
-  btn.disabled = false;
+  const texto = r.ok ? 'Atualizado.' : (r.erros || ['Erro ao buscar.']).join(' | ');
+  const classe = r.ok ? 'ok' : 'erro';
+  [status1, status2].forEach(s => { s.className = classe; s.textContent = texto; });
+  btns.forEach(b => b.disabled = false);
+}
+
+// --- Toggle de busca automática ---
+async function iniciarToggleBusca() {
+  buscaAutomatica = await window.obterBuscaAutomatica();
+  renderizarToggle();
+}
+function renderizarToggle() {
+  document.querySelectorAll('.toggle').forEach(t => t.classList.toggle('ligado', buscaAutomatica));
+}
+async function clicarToggleBusca() {
+  buscaAutomatica = !buscaAutomatica;
+  renderizarToggle();
+  await window.definirBuscaAutomatica(buscaAutomatica);
 }
 
 // --- Buscar por chave ---
@@ -434,13 +469,12 @@ async function clicarBuscarPorChave() {
 }
 
 // --- Verificar cópia ---
-async function mostrarPastaDestinoAtual() {
-  const resultado = await window.carregarConfiguracao();
-  const c = JSON.parse(resultado);
-  const alvo = document.getElementById('pastaDestinoAtual');
-  alvo.textContent = c.pasta_destino
-    ? ('Comparando com: ' + c.pasta_destino)
-    : 'Nenhuma pasta de destino configurada ainda — defina na aba Configuração.';
+async function clicarEscolherPastaVerificar() {
+  const caminho = await window.escolherPasta();
+  if (!caminho) return;
+  pastaVerificarEscolhida = caminho;
+  document.getElementById('pastaVerificar').value = caminho;
+  document.getElementById('btnVerificar').disabled = false;
 }
 
 async function clicarVerificarCopia() {
@@ -450,7 +484,7 @@ async function clicarVerificarCopia() {
   status.textContent = 'Verificando...';
   div.innerHTML = '';
 
-  const resultado = await window.verificarCopia();
+  const resultado = await window.verificarCopia(pastaVerificarEscolhida);
   const r = JSON.parse(resultado);
 
   if (!r.ok) {
@@ -467,7 +501,7 @@ async function clicarVerificarCopia() {
   }
 
   status.className = 'status-form';
-  status.textContent = faltando.length + ' nota(s) ainda não encontrada(s) na pasta de destino:';
+  status.textContent = faltando.length + ' nota(s) ainda não encontrada(s):';
   for (const f of faltando) {
     const item = document.createElement('div');
     item.className = 'resultado-item';
@@ -484,20 +518,15 @@ async function atualizarFormConfiguracao() {
   document.getElementById('cfgCuf').value = c.cUFAutor || '35';
   document.getElementById('cfgPfx').value = c.certificado_pfx || '';
   document.getElementById('cfgPastaSaida').value = c.pasta_saida || '';
-  document.getElementById('cfgPastaDestino').value = c.pasta_destino || '';
 }
 
-async function escolherCfgPfx() {
+async function clicarEscolherCfgPfx() {
   const caminho = await window.escolherArquivo();
   if (caminho) document.getElementById('cfgPfx').value = caminho;
 }
-async function escolherCfgPastaSaida() {
+async function clicarEscolherCfgPastaSaida() {
   const caminho = await window.escolherPasta();
   if (caminho) document.getElementById('cfgPastaSaida').value = caminho;
-}
-async function escolherCfgPastaDestino() {
-  const caminho = await window.escolherPasta();
-  if (caminho) document.getElementById('cfgPastaDestino').value = caminho;
 }
 
 async function clicarSalvarConfiguracao() {
@@ -508,7 +537,6 @@ async function clicarSalvarConfiguracao() {
     certificado_pfx: document.getElementById('cfgPfx').value.trim(),
     certificado_senha: document.getElementById('cfgSenha').value,
     pasta_saida: document.getElementById('cfgPastaSaida').value.trim(),
-    pasta_destino: document.getElementById('cfgPastaDestino').value.trim(),
   };
 
   status.className = 'status-form';
@@ -528,13 +556,13 @@ async function clicarSalvarConfiguracao() {
 }
 
 function clicarReconfigurar() {
-  if (confirm('Isso vai apagar a configuração atual e abrir o assistente de configuração do zero. As notas já baixadas continuam salvas. Confirma?')) {
+  if (confirm('Isso vai apagar a configuração atual e abrir o assistente do zero. As notas já baixadas continuam salvas. Confirma?')) {
     window.reconfigurar();
   }
 }
 
 carregarCatalogo();
-clicarBuscarAgora();
+iniciarToggleBusca().then(() => { if (buscaAutomatica) clicarBuscarAgora(); });
 </script>
 </body>
 </html>

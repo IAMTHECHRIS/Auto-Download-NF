@@ -277,10 +277,11 @@ function revisar() {
   const status = document.getElementById('status');
   const cnpjDigitos = document.getElementById('cnpj').value.replace(/\D/g, '');
   const pfx = document.getElementById('pfx').value.trim();
+  const senha = document.getElementById('senha').value;
   const pasta = document.getElementById('pasta').value.trim();
 
-  if (cnpjDigitos.length !== 14 || !pfx || !pasta) {
-    status.textContent = 'Preencha CNPJ (14 dígitos), certificado e pasta de saída.';
+  if (cnpjDigitos.length !== 14 || !pfx || !senha || !pasta) {
+    status.textContent = 'Preencha CNPJ (14 dígitos), certificado, senha e pasta de saída.';
     status.className = 'status erro';
     return;
   }

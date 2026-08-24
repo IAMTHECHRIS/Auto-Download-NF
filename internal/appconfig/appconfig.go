@@ -25,11 +25,12 @@ type Config struct {
 	// mover pra pasta sincronizada de verdade. Nunca gravar direto numa
 	// pasta de sync — perde a noção do que é novo.
 	PastaSaida string `json:"pasta_saida"`
-	// PastaDestino é OPCIONAL — a pasta sincronizada de verdade (ex: dentro
-	// do Google Drive) pra onde o usuário copia os arquivos manualmente
-	// depois de conferir. Usada só pelo painel, pra checar se alguma nota
-	// já baixada ainda não foi copiada pra lá (ver internal/verificacao).
-	PastaDestino string `json:"pasta_destino,omitempty"`
+	// AutoBuscarAoAbrir controla se o painel busca notas novas sozinho
+	// assim que abre. Zero value (false) É de propósito o padrão — abrir o
+	// painel só pra olhar/mexer em configuração não deveria disparar
+	// chamada nenhuma na API da SEFAZ. O usuário liga isso explicitamente
+	// pelo botão na aba Notas quando quiser.
+	AutoBuscarAoAbrir bool `json:"auto_buscar_ao_abrir"`
 }
 
 // configPath usa a PASTA ATUAL (não o caminho do .exe) — no Windows, dar

@@ -148,9 +148,13 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 		return respostaOK(msg)
 	})
 
-	w.Bind("verificarCopia", func() string {
-		debugLog.Printf(">> verificarCopia pastaDestino=%s", cfg.PastaDestino)
-		faltando, err := verificacao.Verificar(cfg.PastaSaida, cfg.PastaDestino)
+	// pastaDestino agora é escolhida NA HORA pelo usuário (botão "Procurar"
+	// na própria aba Verificar cópia), não fica salva no config.json — o
+	// usuário pode querer checar contra pastas diferentes em momentos
+	// diferentes, não só uma fixa.
+	w.Bind("verificarCopia", func(pastaDestino string) string {
+		debugLog.Printf(">> verificarCopia pastaDestino=%s", pastaDestino)
+		faltando, err := verificacao.Verificar(cfg.PastaSaida, pastaDestino)
 		debugLog.Printf("<< verificarCopia faltando=%d err=%v", len(faltando), err)
 		if err != nil {
 			b, _ := json.Marshal(map[string]any{"ok": false, "erro": err.Error()})
@@ -160,13 +164,24 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 		return string(b)
 	})
 
+	w.Bind("obterBuscaAutomatica", func() bool {
+		return cfg.AutoBuscarAoAbrir
+	})
+
+	w.Bind("definirBuscaAutomatica", func(ligado bool) {
+		cfg.AutoBuscarAoAbrir = ligado
+		if err := appconfig.Save(cfg); err != nil {
+			debugLog.Printf("erro ao salvar busca automática: %v", err)
+		}
+		debugLog.Printf("busca automática ao abrir: %v", ligado)
+	})
+
 	w.Bind("carregarConfiguracao", func() string {
 		b, _ := json.Marshal(map[string]any{
 			"cnpj":            cfg.CNPJ,
 			"cUFAutor":        cfg.CUFAutor,
 			"certificado_pfx": cfg.CertificadoPfx,
 			"pasta_saida":     cfg.PastaSaida,
-			"pasta_destino":   cfg.PastaDestino,
 		})
 		return string(b)
 	})
@@ -178,7 +193,6 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 			CertificadoPfx   string `json:"certificado_pfx"`
 			CertificadoSenha string `json:"certificado_senha"`
 			PastaSaida       string `json:"pasta_saida"`
-			PastaDestino     string `json:"pasta_destino"`
 		}
 		if err := json.Unmarshal([]byte(cfgJSON), &entrada); err != nil {
 			return respostaErro("dados inválidos: " + err.Error())
@@ -189,7 +203,6 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 		novoCfg.CUFAutor = entrada.CUFAutor
 		novoCfg.CertificadoPfx = entrada.CertificadoPfx
 		novoCfg.PastaSaida = entrada.PastaSaida
-		novoCfg.PastaDestino = entrada.PastaDestino
 		if strings.TrimSpace(entrada.CertificadoSenha) != "" {
 			novoCfg.CertificadoSenha = entrada.CertificadoSenha
 		}
@@ -202,9 +215,7 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 		}
 
 		cfg = novoCfg
-		debugLog.Printf("configuração atualizada pelo painel: %+v", map[string]string{
-			"cnpj": cfg.CNPJ, "pasta_saida": cfg.PastaSaida, "pasta_destino": cfg.PastaDestino,
-		})
+		debugLog.Printf("configuração atualizada pelo painel: cnpj=%s pasta_saida=%s", cfg.CNPJ, cfg.PastaSaida)
 
 		aviso := ""
 		if strings.TrimSpace(entrada.PastaSaida) != "" {
