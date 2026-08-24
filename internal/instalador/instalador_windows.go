@@ -43,8 +43,12 @@ func init() {
 // diálogo nunca encosta no COM do WebView2: são processos diferentes,
 // cada um com sua própria memória.
 func escolherViaPowerShell(script string) (string, error) {
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
-	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script)
+	// HideWindow por si só ainda cria a janela do console (só oculta depois),
+	// o que gera aquele flash/delay. CREATE_NO_WINDOW (0x08000000) diz pro
+	// Windows nem criar a janela — processo nasce sem console nenhum.
+	const createNoWindow = 0x08000000
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
 	var saida bytes.Buffer
 	cmd.Stdout = &saida
 	if err := cmd.Run(); err != nil {
@@ -63,20 +67,23 @@ func Executar() bool {
 	w.SetTitle("Coletor de Notas Fiscais — Configuração")
 	w.SetSize(560, 720, webview.HintFixed)
 
-	// IMPORTANTE: diálogos nativos do Windows (abrir arquivo/pasta) precisam
-	// rodar na MESMA thread que criou a janela — o Bind() do webview roda o
-	// callback numa goroutine separada, então chamar o diálogo direto ali
-	// trava/falha silenciosamente. w.Dispatch() agenda a chamada pra rodar
-	// na thread certa; o canal serve só pra esperar o resultado voltar.
 	w.Bind("escolherArquivo", func() string {
 		caminho, err := escolherViaPowerShell(`
 Add-Type -AssemblyName System.Windows.Forms
+$owner = New-Object System.Windows.Forms.Form
+$owner.TopMost = $true
+$owner.ShowInTaskbar = $false
+$owner.StartPosition = 'CenterScreen'
+$owner.Size = New-Object System.Drawing.Size(0,0)
+$owner.Show()
+$owner.Activate()
 $f = New-Object System.Windows.Forms.OpenFileDialog
 $f.Title = "Selecione o certificado .pfx"
 $f.Filter = "Certificado digital (*.pfx)|*.pfx|Todos os arquivos (*.*)|*.*"
-if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+if ($f.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
     Write-Output $f.FileName
 }
+$owner.Dispose()
 `)
 		if err != nil {
 			return ""
@@ -87,11 +94,19 @@ if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
 	w.Bind("escolherPasta", func() string {
 		caminho, err := escolherViaPowerShell(`
 Add-Type -AssemblyName System.Windows.Forms
+$owner = New-Object System.Windows.Forms.Form
+$owner.TopMost = $true
+$owner.ShowInTaskbar = $false
+$owner.StartPosition = 'CenterScreen'
+$owner.Size = New-Object System.Drawing.Size(0,0)
+$owner.Show()
+$owner.Activate()
 $f = New-Object System.Windows.Forms.FolderBrowserDialog
 $f.Description = "Selecione a pasta de saída (fora de sync de nuvem)"
-if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+if ($f.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
     Write-Output $f.SelectedPath
 }
+$owner.Dispose()
 `)
 		if err != nil {
 			return ""
