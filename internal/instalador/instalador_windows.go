@@ -92,6 +92,12 @@ $owner.Dispose()
 	})
 
 	w.Bind("escolherPasta", func() string {
+		// FolderBrowserDialog é o diálogo antigo (SHBrowseForFolder) e tinha
+		// o mesmo tipo de bug do OpenFileDialog original. Em vez de insistir
+		// nele, reaproveito o OpenFileDialog — que já se provou funcionando
+		// pro certificado — com um truque clássico: o usuário navega até a
+		// pasta e clica "Abrir" com o nome de arquivo fixo abaixo; a gente
+		// descarta o nome e fica só com o diretório escolhido.
 		caminho, err := escolherViaPowerShell(`
 Add-Type -AssemblyName System.Windows.Forms
 $owner = New-Object System.Windows.Forms.Form
@@ -101,10 +107,14 @@ $owner.StartPosition = 'CenterScreen'
 $owner.Size = New-Object System.Drawing.Size(0,0)
 $owner.Show()
 $owner.Activate()
-$f = New-Object System.Windows.Forms.FolderBrowserDialog
-$f.Description = "Selecione a pasta de saída (fora de sync de nuvem)"
+$f = New-Object System.Windows.Forms.OpenFileDialog
+$f.Title = "Navegue até a pasta e clique em Abrir (o nome do arquivo abaixo não importa)"
+$f.CheckFileExists = $false
+$f.ValidateNames = $false
+$f.FileName = "Selecione esta pasta"
+$f.Filter = "Selecionar pasta|*.selecionar-pasta"
 if ($f.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
-    Write-Output $f.SelectedPath
+    Write-Output ([System.IO.Path]::GetDirectoryName($f.FileName))
 }
 $owner.Dispose()
 `)
