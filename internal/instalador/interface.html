@@ -201,7 +201,7 @@
     <label>Pasta onde as notas serão salvas</label>
     <div class="row">
       <input type="text" id="pasta" placeholder="Nenhuma pasta selecionada" readonly>
-      <button class="btn-secundario" onclick="escolherPasta()">Procurar…</button>
+      <button class="btn-secundario" onclick="escolherPastaClick()">Procurar…</button>
     </div>
     <div class="aviso">
       ⚠ Escolha uma pasta <strong>local</strong>, fora do OneDrive/Google Drive/Dropbox.
@@ -258,7 +258,13 @@ async function escolherPfx() {
   const caminho = await window.escolherArquivo();
   if (caminho) document.getElementById('pfx').value = caminho;
 }
-async function escolherPasta() {
+async function escolherPastaClick() {
+  // NOME PROPOSITALMENTE DIFERENTE de "escolherPasta": uma função global
+  // declarada como "function escolherPasta(){}" vira automaticamente
+  // "window.escolherPasta", e isso SOBRESCREVE a função que o Go registrou
+  // com esse nome via w.Bind(). O clique passava a chamar a si mesma pra
+  // sempre, sem nunca alcançar o Go — por isso o diálogo nunca abria e
+  // nada aparecia no log.
   const caminho = await window.escolherPasta();
   if (caminho) document.getElementById('pasta').value = caminho;
 }
