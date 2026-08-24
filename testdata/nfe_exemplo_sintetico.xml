@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- DADO SINTÉTICO — inventado só pra testar o parser, não é nota fiscal real -->
+<nfeProc versao="4.00">
+  <NFe>
+    <infNFe>
+      <ide>
+        <mod>55</mod>
+        <nNF>90</nNF>
+        <dhEmi>2026-08-23T14:30:00-03:00</dhEmi>
+      </ide>
+      <emit>
+        <xNome>FORNECEDOR TESTE LTDA</xNome>
+      </emit>
+      <total>
+        <ICMSTot>
+          <vNF>1000.00</vNF>
+        </ICMSTot>
+      </total>
+    </infNFe>
+  </NFe>
+</nfeProc>

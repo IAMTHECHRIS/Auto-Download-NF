@@ -1,0 +1,19 @@
+# Segredos e dados reais — NUNCA versionar
+config.json
+*.pfx
+*.pem
+*.p12
+
+# Dados fiscais reais capturados
+dados-fiscais/
+/root/dados-fiscais/
+
+# Binários compilados (o usuário baixa via release, não commita)
+dist/
+*.exe
+
+# Checkpoints (estado local de execução, não é código)
+.checkpoint-*
+
+# Notas internas (nome da empresa, infra específica) — não é público
+OPERACAO_INTERNA.md

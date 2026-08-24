@@ -1,0 +1,163 @@
+// Package appconfig cuida da configuração da máquina onde o programa roda.
+// Na primeira execução, pergunta interativamente (pasta de saída,
+// certificado, senha) e salva num config.json ao lado do executável — nas
+// próximas vezes só lê o arquivo, sem perguntar nada (necessário pra rodar
+// sozinho via agendador de tarefas do Windows).
+package appconfig
+
+import (
+	"bufio"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+type Config struct {
+	CNPJ             string `json:"cnpj"`
+	CUFAutor         string `json:"cUFAutor"` // código IBGE do estado (SP=35)
+	CertificadoPfx   string `json:"certificado_pfx"`
+	CertificadoSenha string `json:"certificado_senha"`
+	// PastaSaida é onde os XMLs/PDFs chegam — de PROPÓSITO fora de
+	// qualquer pasta sincronizada (OneDrive/Google Drive/Dropbox). É uma
+	// área de chegada: o usuário confere o que baixou e decide o que
+	// mover pra pasta sincronizada de verdade. Nunca gravar direto numa
+	// pasta de sync — perde a noção do que é novo.
+	PastaSaida string `json:"pasta_saida"`
+}
+
+// configPath usa a PASTA ATUAL (não o caminho do .exe) — no Windows, dar
+// duplo-clique num .exe já deixa o diretório atual igual à pasta dele, e
+// aqui no desenvolvimento (rodando com "go run") isso também funciona
+// direto, sem precisar de exe fixo.
+func configPath() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "config.json"
+	}
+	return filepath.Join(wd, "config.json")
+}
+
+// Load lê o config.json ao lado do executável. Se não existir, roda o
+// assistente interativo (Setup) e salva antes de devolver.
+func Load() (Config, error) {
+	path := configPath()
+
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		if !terminalInterativo() {
+			return Config{}, fmt.Errorf(
+				"config.json não existe em %s, e não há terminal interativo pra perguntar "+
+					"(rodando via agendador/timer?). Rode manualmente uma vez primeiro pra criar o config.json",
+				path,
+			)
+		}
+		cfg, err := Setup()
+		if err != nil {
+			return Config{}, err
+		}
+		if err := Save(cfg); err != nil {
+			return Config{}, fmt.Errorf("salvar config: %w", err)
+		}
+		return cfg, nil
+	}
+	if err != nil {
+		return Config{}, fmt.Errorf("ler config %s: %w", path, err)
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return Config{}, fmt.Errorf("config.json inválido: %w", err)
+	}
+	return cfg, nil
+}
+
+func Save(cfg Config) error {
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configPath(), data, 0o600)
+}
+
+// Setup pergunta interativamente no terminal e monta a config. Chamado só
+// na primeira execução (quando config.json ainda não existe).
+func Setup() (Config, error) {
+	reader := bufio.NewReader(os.Stdin)
+
+	fmt.Println("=== Primeira execução — configuração ===")
+	fmt.Println()
+
+	fmt.Print("CNPJ da empresa (só números, sem pontuação): ")
+	cnpj := readLine(reader)
+	for cnpj == "" {
+		fmt.Print("  (obrigatório) CNPJ da empresa: ")
+		cnpj = readLine(reader)
+	}
+
+	fmt.Print("Código IBGE do estado (SP=35) [35]: ")
+	cuf := readLine(reader)
+	if cuf == "" {
+		cuf = "35"
+	}
+
+	fmt.Print("Caminho completo do certificado .pfx: ")
+	pfx := readLine(reader)
+	for pfx == "" {
+		fmt.Print("  (obrigatório) Caminho completo do certificado .pfx: ")
+		pfx = readLine(reader)
+	}
+
+	fmt.Print("Senha do certificado: ")
+	senha := readLine(reader)
+
+	fmt.Println()
+	fmt.Println("Pasta onde as notas vão ser salvas.")
+	fmt.Println("IMPORTANTE: escolha uma pasta LOCAL, que NÃO sincroniza com")
+	fmt.Println("nuvem (OneDrive/Google Drive/Dropbox). Essa é uma área de")
+	fmt.Println("chegada — depois de conferir, você move manualmente pra")
+	fmt.Println("pasta sincronizada de verdade.")
+	fmt.Print("Pasta de saída (ex: C:\\NotasFiscais\\entrada): ")
+	pasta := readLine(reader)
+	for pasta == "" {
+		fmt.Print("  (obrigatório) Pasta de saída: ")
+		pasta = readLine(reader)
+	}
+
+	if err := os.MkdirAll(pasta, 0o755); err != nil {
+		return Config{}, fmt.Errorf("criar pasta %s: %w", pasta, err)
+	}
+
+	cfg := Config{
+		CNPJ:             cnpj,
+		CUFAutor:         cuf,
+		CertificadoPfx:   pfx,
+		CertificadoSenha: senha,
+		PastaSaida:       pasta,
+	}
+
+	fmt.Println()
+	fmt.Println("Configuração salva em config.json (ao lado do programa).")
+	fmt.Println("Da próxima vez não vai perguntar de novo — pra mudar algo,")
+	fmt.Println("edite o config.json diretamente ou apague pra refazer.")
+	fmt.Println()
+
+	return cfg, nil
+}
+
+func readLine(r *bufio.Reader) string {
+	line, _ := r.ReadString('\n')
+	return strings.TrimSpace(line)
+}
+
+// terminalInterativo checa se stdin é um terminal de verdade (não um
+// agendador/timer sem tty). Não é 100% infalível em todo SO, mas evita o
+// caso comum de travar pra sempre esperando um Enter que nunca vem.
+func terminalInterativo() bool {
+	info, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
