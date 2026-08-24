@@ -25,6 +25,11 @@ type Config struct {
 	// mover pra pasta sincronizada de verdade. Nunca gravar direto numa
 	// pasta de sync — perde a noção do que é novo.
 	PastaSaida string `json:"pasta_saida"`
+	// PastaDestino é OPCIONAL — a pasta sincronizada de verdade (ex: dentro
+	// do Google Drive) pra onde o usuário copia os arquivos manualmente
+	// depois de conferir. Usada só pelo painel, pra checar se alguma nota
+	// já baixada ainda não foi copiada pra lá (ver internal/verificacao).
+	PastaDestino string `json:"pasta_destino,omitempty"`
 }
 
 // configPath usa a PASTA ATUAL (não o caminho do .exe) — no Windows, dar
@@ -88,11 +93,20 @@ func Load() (Config, error) {
 }
 
 func Save(cfg Config) error {
+	return SalvarEm(filepath.Dir(configPath()), cfg)
+}
+
+// SalvarEm grava o config.json numa pasta específica — usado pelo
+// relocador na primeira instalação, quando o processo ainda está rodando
+// da pasta de Downloads mas o config.json precisa nascer já na pasta
+// instalada (não dá pra usar Save(), que sempre grava no diretório atual
+// do processo).
+func SalvarEm(dir string, cfg Config) error {
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(configPath(), data, 0o600)
+	return os.WriteFile(filepath.Join(dir, "config.json"), data, 0o600)
 }
 
 // Setup pergunta interativamente no terminal e monta a config. Chamado só

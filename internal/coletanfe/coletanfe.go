@@ -23,6 +23,73 @@ import (
 // MaxPaginas — cautela deliberada: não varrer tudo numa tacada só.
 const MaxPaginas = 3
 
+// BuscarUma pede UMA nota específica pela chave de acesso (44 dígitos) —
+// usada quando o usuário apaga um XML sem querer e quer recuperar só
+// aquele, sem mexer no checkpoint/NSU da varredura diária. Grava o
+// documento e registra no catálogo do mesmo jeito que a coleta normal.
+func BuscarUma(cfg appconfig.Config, chave string) (document.Document, string, error) {
+	outDir := filepath.Join(cfg.PastaSaida, "nfe-compras")
+
+	client, err := nfedist.NewClient(cfg.CertificadoPfx, cfg.CertificadoSenha)
+	if err != nil {
+		return document.Document{}, "", fmt.Errorf("criar client: %w", err)
+	}
+
+	res, err := client.BuscarPorChave(cfg.CUFAutor, cfg.CNPJ, chave)
+	if err != nil {
+		return document.Document{}, "", fmt.Errorf("consultar chave: %w", err)
+	}
+	if res.CStat != "138" && res.CStat != "137" {
+		return document.Document{}, "", fmt.Errorf("SEFAZ recusou (cStat=%s): %s", res.CStat, res.XMotivo)
+	}
+	if len(res.Docs) == 0 {
+		return document.Document{}, "", fmt.Errorf("nenhum documento encontrado pra essa chave")
+	}
+
+	docZip := res.Docs[0]
+	xmlBytes, err := nfedist.DecodeXML(docZip)
+	if err != nil {
+		return document.Document{}, "", fmt.Errorf("decodificar XML: %w", err)
+	}
+
+	var doc document.Document
+	switch docZip.Schema {
+	case "resNFe_v1.01.xsd":
+		fornecedor, data, valor, chaveResp, cancelada, err := nfedist.ParseResNFe(xmlBytes)
+		if err != nil {
+			return document.Document{}, "", fmt.Errorf("parsear resNFe: %w", err)
+		}
+		doc = document.Document{
+			Tipo:       document.TipoNFEC,
+			Fornecedor: fornecedor,
+			Data:       data,
+			Numero:     nfedist.NumeroDaChave(chaveResp),
+			Valor:      valor,
+			Chave:      chaveResp,
+		}
+		if cancelada {
+			doc.Status = "CANCELADO"
+		}
+	case "procNFe_v4.00.xsd":
+		doc, err = document.ParseNFe(xmlBytes)
+		if err != nil {
+			return document.Document{}, "", fmt.Errorf("parsear procNFe: %w", err)
+		}
+	default:
+		return document.Document{}, "", fmt.Errorf("essa chave não é de uma NFe (schema retornado: %s) — pode ser um evento de cancelamento", docZip.Schema)
+	}
+
+	caminho, err := organizer.PlaceDocument(outDir, doc, ".xml", xmlBytes)
+	if err != nil {
+		return document.Document{}, "", fmt.Errorf("gravar arquivo: %w", err)
+	}
+	if err := catalogo.Registrar(cfg.PastaSaida, doc, caminho); err != nil {
+		log.Printf("[NFe] aviso ao registrar no catálogo: %v", err)
+	}
+
+	return doc, caminho, nil
+}
+
 // AnoFoco — foco em 2026 por pedido do Ismael (reduz volume; documentos de
 // outros anos vêm na resposta mas são descartados).
 const AnoFoco = 2026

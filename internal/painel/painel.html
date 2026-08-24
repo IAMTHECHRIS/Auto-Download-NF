@@ -29,15 +29,34 @@
     user-select: none;
   }
   header {
-    padding: 18px 24px 14px;
+    padding: 16px 24px 0;
     border-bottom: 1px solid var(--border);
+  }
+  .header-top {
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+    padding-bottom: 14px;
   }
   h1 { font-size: 17px; margin: 0 0 2px; font-weight: 600; }
   .subtitle { font-size: 12px; color: var(--muted); }
+  nav.abas { display: flex; gap: 4px; }
+  nav.abas button {
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: var(--muted);
+    font-size: 13px;
+    padding: 9px 14px;
+    cursor: pointer;
+  }
+  nav.abas button:hover { color: var(--text); }
+  nav.abas button.ativa { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
+
+  section.aba { display: none; flex: 1; min-height: 0; flex-direction: column; }
+  section.aba.ativa { display: flex; }
+
   .barra {
     display: flex;
     gap: 10px;
@@ -46,9 +65,7 @@
     border-bottom: 1px solid var(--border);
     flex-wrap: wrap;
   }
-  input[type=text] {
-    flex: 1;
-    min-width: 180px;
+  input[type=text], input[type=password], select {
     padding: 9px 12px;
     background: #0d1220;
     border: 1px solid var(--border);
@@ -59,7 +76,8 @@
     -webkit-user-select: text;
     user-select: text;
   }
-  input[type=text]:focus { border-color: var(--accent); }
+  input[type=text]:focus, input[type=password]:focus, select:focus { border-color: var(--accent); }
+  .barra input[type=text] { flex: 1; min-width: 180px; }
   button {
     padding: 9px 14px;
     border-radius: 8px;
@@ -76,10 +94,7 @@
   }
   .btn-principal:hover { background: var(--accent-hover); }
   .btn-principal:disabled { opacity: 0.5; cursor: default; }
-  .btn-secundario {
-    background: #232b45;
-    color: var(--text);
-  }
+  .btn-secundario { background: #232b45; color: var(--text); }
   .btn-secundario:hover { background: #2b3454; }
   .btn-link {
     background: transparent;
@@ -90,99 +105,204 @@
     padding: 4px 6px;
   }
   .btn-link:hover { color: var(--text); }
-  #status-busca {
-    font-size: 12px;
-    color: var(--muted);
-    min-width: 160px;
-  }
+  #status-busca { font-size: 12px; color: var(--muted); min-width: 160px; }
   #status-busca.ok { color: var(--ok); }
   #status-busca.erro { color: var(--erro); }
+
   main { flex: 1; overflow: auto; padding: 0 24px 20px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
   thead th {
-    position: sticky;
-    top: 0;
-    background: var(--bg);
-    text-align: left;
-    padding: 10px 8px;
-    font-size: 11px;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    color: var(--muted);
+    position: sticky; top: 0; background: var(--bg);
+    text-align: left; padding: 10px 8px; font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted);
     border-bottom: 1px solid var(--border);
   }
-  tbody td {
-    padding: 9px 8px;
-    border-bottom: 1px solid var(--border);
-    vertical-align: middle;
-  }
+  tbody td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
   tbody tr:hover { background: rgba(255,255,255,0.02); }
   .tag {
-    display: inline-block;
-    padding: 2px 7px;
-    border-radius: 5px;
-    font-size: 11px;
-    font-weight: 600;
-    background: #232b45;
-    color: var(--muted);
+    display: inline-block; padding: 2px 7px; border-radius: 5px;
+    font-size: 11px; font-weight: 600; background: #232b45; color: var(--muted);
   }
   .tag.cancelado { background: rgba(255,107,107,0.15); color: var(--erro); }
   .valor { text-align: right; white-space: nowrap; }
-  .vazio {
-    text-align: center;
-    color: var(--muted);
-    padding: 60px 20px;
-    font-size: 13px;
-  }
+  .vazio { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 13px; }
   footer {
-    padding: 10px 24px;
-    border-top: 1px solid var(--border);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    padding: 10px 24px; border-top: 1px solid var(--border);
+    display: flex; justify-content: space-between; align-items: center;
   }
   #contagem { font-size: 12px; color: var(--muted); }
+
+  .painel-conteudo { padding: 22px 24px; max-width: 620px; }
+  .painel-conteudo p.explicacao { font-size: 12.5px; color: var(--muted); margin: 0 0 18px; line-height: 1.5; }
+  .campo { margin-bottom: 16px; }
+  .campo label {
+    display: block; font-size: 12px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 6px;
+  }
+  .campo input[type=text], .campo input[type=password], .campo select { width: 100%; }
+  .campo .row { display: flex; gap: 8px; }
+  .campo .row input { flex: 1; }
+  .status-form { margin-top: 12px; font-size: 12.5px; min-height: 16px; }
+  .status-form.ok { color: var(--ok); }
+  .status-form.erro { color: var(--erro); }
+  .resultado-item {
+    display: flex; justify-content: space-between; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .resultado-item .valor2 { text-align: right; }
 </style>
 </head>
 <body>
   <header>
-    <div>
-      <h1>Coletor de Notas Fiscais</h1>
-      <div class="subtitle">Painel — o que já foi baixado</div>
+    <div class="header-top">
+      <div>
+        <h1>Coletor de Notas Fiscais</h1>
+        <div class="subtitle">Painel</div>
+      </div>
     </div>
-    <button class="btn-link" onclick="reconfigurar()">Reconfigurar…</button>
+    <nav class="abas">
+      <button class="ativa" data-aba="notas" onclick="mudarAba('notas')">Notas</button>
+      <button data-aba="chave" onclick="mudarAba('chave')">Buscar por chave</button>
+      <button data-aba="verificar" onclick="mudarAba('verificar')">Verificar cópia</button>
+      <button data-aba="config" onclick="mudarAba('config')">Configuração</button>
+    </nav>
   </header>
 
-  <div class="barra">
-    <input type="text" id="busca" placeholder="Buscar por fornecedor, número ou tipo..." oninput="renderizar()">
-    <span id="status-busca"></span>
-    <button class="btn-principal" id="btnBuscar" onclick="buscarAgora()">Buscar notas agora</button>
-  </div>
+  <!-- ABA: Notas -->
+  <section class="aba ativa" id="aba-notas">
+    <div class="barra">
+      <input type="text" id="busca" placeholder="Buscar por fornecedor, número ou tipo..." oninput="renderizar()">
+      <span id="status-busca"></span>
+      <button class="btn-principal" id="btnBuscar" onclick="buscarAgora()">Buscar notas agora</button>
+    </div>
+    <main>
+      <table id="tabela">
+        <thead>
+          <tr>
+            <th>Data</th><th>Tipo</th><th>Fornecedor</th><th>Número</th>
+            <th class="valor">Valor</th><th>Status</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="corpo"></tbody>
+      </table>
+      <div class="vazio" id="vazio" style="display:none">Nenhuma nota ainda. Clique em "Buscar notas agora".</div>
+    </main>
+    <footer><span id="contagem"></span></footer>
+  </section>
 
-  <main>
-    <table id="tabela">
-      <thead>
-        <tr>
-          <th>Data</th>
-          <th>Tipo</th>
-          <th>Fornecedor</th>
-          <th>Número</th>
-          <th class="valor">Valor</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="corpo"></tbody>
-    </table>
-    <div class="vazio" id="vazio" style="display:none">Nenhuma nota ainda. Clique em "Buscar notas agora".</div>
-  </main>
+  <!-- ABA: Buscar por chave -->
+  <section class="aba" id="aba-chave">
+    <div class="painel-conteudo">
+      <p class="explicacao">
+        Apagou um XML sem querer? Cole a chave de acesso (44 dígitos) da nota
+        pra pedir ela de novo pra SEFAZ, sem mexer na busca automática diária.
+        Evite fazer isso em lote — a SEFAZ pode limitar quantas consultas
+        avulsas como essa são permitidas por dia (não temos esse número
+        confirmado), então use com moderação.
+      </p>
+      <div class="campo">
+        <label>Chave de acesso (44 dígitos)</label>
+        <input type="text" id="chaveInput" maxlength="44" placeholder="00000000000000000000000000000000000000000000" inputmode="numeric">
+      </div>
+      <button class="btn-principal" id="btnBuscarChave" onclick="buscarPorChave()">Buscar essa nota</button>
+      <div class="status-form" id="status-chave"></div>
+    </div>
+  </section>
 
-  <footer>
-    <span id="contagem"></span>
-  </footer>
+  <!-- ABA: Verificar cópia -->
+  <section class="aba" id="aba-verificar">
+    <div class="painel-conteudo" style="max-width: 100%;">
+      <p class="explicacao">
+        Compara tudo que já foi baixado com o que existe dentro da <strong>pasta
+        de destino</strong> (configurada na aba Configuração — normalmente a
+        pasta do Google Drive). O que aparecer aqui embaixo é o que ainda não
+        foi encontrado lá. Se o seu processo é copiar manualmente pra lá depois
+        de conferir, é normal essa lista ter itens — são só os que ainda não
+        foram copiados, não necessariamente perdidos.
+      </p>
+      <button class="btn-principal" onclick="verificarCopia()">Verificar agora</button>
+      <div class="status-form" id="status-verificar"></div>
+      <div id="resultado-verificar" style="margin-top: 16px;"></div>
+    </div>
+  </section>
+
+  <!-- ABA: Configuração -->
+  <section class="aba" id="aba-config">
+    <div class="painel-conteudo">
+      <p class="explicacao">
+        Muda aqui quando precisar: certificado vencido, CNPJ, estado, ou as
+        pastas usadas. Notas já baixadas continuam onde estão — mudar a pasta
+        de saída só vale pras próximas coletas.
+      </p>
+
+      <div class="campo">
+        <label>CNPJ da empresa</label>
+        <input type="text" id="cfgCnpj" maxlength="18" inputmode="numeric">
+      </div>
+
+      <div class="campo">
+        <label>Estado</label>
+        <select id="cfgCuf">
+          <option value="12">Acre</option><option value="27">Alagoas</option>
+          <option value="16">Amapá</option><option value="13">Amazonas</option>
+          <option value="29">Bahia</option><option value="23">Ceará</option>
+          <option value="53">Distrito Federal</option><option value="32">Espírito Santo</option>
+          <option value="52">Goiás</option><option value="21">Maranhão</option>
+          <option value="51">Mato Grosso</option><option value="50">Mato Grosso do Sul</option>
+          <option value="31">Minas Gerais</option><option value="15">Pará</option>
+          <option value="25">Paraíba</option><option value="41">Paraná</option>
+          <option value="26">Pernambuco</option><option value="22">Piauí</option>
+          <option value="33">Rio de Janeiro</option><option value="24">Rio Grande do Norte</option>
+          <option value="43">Rio Grande do Sul</option><option value="11">Rondônia</option>
+          <option value="14">Roraima</option><option value="42">Santa Catarina</option>
+          <option value="35">São Paulo</option><option value="28">Sergipe</option>
+          <option value="17">Tocantins</option>
+        </select>
+      </div>
+
+      <div class="campo">
+        <label>Certificado digital (.pfx)</label>
+        <div class="row">
+          <input type="text" id="cfgPfx" readonly>
+          <button class="btn-secundario" onclick="escolherCfgPfx()">Procurar…</button>
+        </div>
+      </div>
+
+      <div class="campo">
+        <label>Senha do certificado (deixe em branco pra manter a atual)</label>
+        <input type="password" id="cfgSenha" placeholder="••••••••">
+      </div>
+
+      <div class="campo">
+        <label>Pasta onde as notas são salvas</label>
+        <div class="row">
+          <input type="text" id="cfgPastaSaida" readonly>
+          <button class="btn-secundario" onclick="escolherCfgPastaSaida()">Procurar…</button>
+        </div>
+      </div>
+
+      <div class="campo">
+        <label>Pasta de destino (opcional — pra aba "Verificar cópia")</label>
+        <div class="row">
+          <input type="text" id="cfgPastaDestino" placeholder="Nenhuma selecionada" readonly>
+          <button class="btn-secundario" onclick="escolherCfgPastaDestino()">Procurar…</button>
+        </div>
+      </div>
+
+      <button class="btn-principal" onclick="salvarConfiguracaoPainel()">Salvar configuração</button>
+      <button class="btn-link" onclick="reconfigurar()">Refazer configuração do zero…</button>
+      <div class="status-form" id="status-config"></div>
+    </div>
+  </section>
 
 <script>
 let entradas = [];
+
+function mudarAba(nome) {
+  document.querySelectorAll('nav.abas button').forEach(b => b.classList.toggle('ativa', b.dataset.aba === nome));
+  document.querySelectorAll('section.aba').forEach(s => s.classList.toggle('ativa', s.id === 'aba-' + nome));
+  if (nome === 'config') carregarConfiguracao();
+}
 
 function formatarValor(v) {
   return 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -256,7 +376,6 @@ async function buscarAgora() {
 
   const resultado = await window.buscarAgora();
   const r = JSON.parse(resultado);
-
   await carregarCatalogo();
 
   if (r.ok) {
@@ -269,8 +388,124 @@ async function buscarAgora() {
   btn.disabled = false;
 }
 
+// --- Buscar por chave ---
+async function buscarPorChave() {
+  const btn = document.getElementById('btnBuscarChave');
+  const status = document.getElementById('status-chave');
+  const chave = document.getElementById('chaveInput').value.replace(/\D/g, '');
+
+  if (chave.length !== 44) {
+    status.className = 'status-form erro';
+    status.textContent = 'A chave precisa ter 44 dígitos.';
+    return;
+  }
+
+  btn.disabled = true;
+  status.className = 'status-form';
+  status.textContent = 'Buscando na SEFAZ...';
+
+  const resultado = await window.buscarPorChave(chave);
+  const r = JSON.parse(resultado);
+
+  if (r.ok) {
+    status.className = 'status-form ok';
+    status.textContent = r.mensagem;
+    document.getElementById('chaveInput').value = '';
+    await carregarCatalogo();
+  } else {
+    status.className = 'status-form erro';
+    status.textContent = r.erro;
+  }
+  btn.disabled = false;
+}
+
+// --- Verificar cópia ---
+async function verificarCopia() {
+  const status = document.getElementById('status-verificar');
+  const div = document.getElementById('resultado-verificar');
+  status.className = 'status-form';
+  status.textContent = 'Verificando...';
+  div.innerHTML = '';
+
+  const resultado = await window.verificarCopia();
+  const r = JSON.parse(resultado);
+
+  if (!r.ok) {
+    status.className = 'status-form erro';
+    status.textContent = r.erro;
+    return;
+  }
+
+  const faltando = r.faltando || [];
+  if (faltando.length === 0) {
+    status.className = 'status-form ok';
+    status.textContent = 'Tudo copiado — nada pendente.';
+    return;
+  }
+
+  status.className = 'status-form';
+  status.textContent = faltando.length + ' nota(s) ainda não encontrada(s) na pasta de destino:';
+  for (const f of faltando) {
+    const item = document.createElement('div');
+    item.className = 'resultado-item';
+    item.innerHTML = `<span>${formatarData(f.data)} — ${f.tipo} — ${f.fornecedor} nº ${f.numero}</span><span class="valor2">${formatarValor(f.valor)}</span>`;
+    div.appendChild(item);
+  }
+}
+
+// --- Configuração ---
+async function carregarConfiguracao() {
+  const resultado = await window.carregarConfiguracao();
+  const c = JSON.parse(resultado);
+  document.getElementById('cfgCnpj').value = c.cnpj || '';
+  document.getElementById('cfgCuf').value = c.cUFAutor || '35';
+  document.getElementById('cfgPfx').value = c.certificado_pfx || '';
+  document.getElementById('cfgPastaSaida').value = c.pasta_saida || '';
+  document.getElementById('cfgPastaDestino').value = c.pasta_destino || '';
+}
+
+async function escolherCfgPfx() {
+  const caminho = await window.escolherArquivo();
+  if (caminho) document.getElementById('cfgPfx').value = caminho;
+}
+async function escolherCfgPastaSaida() {
+  const caminho = await window.escolherPasta();
+  if (caminho) document.getElementById('cfgPastaSaida').value = caminho;
+}
+async function escolherCfgPastaDestino() {
+  const caminho = await window.escolherPasta();
+  if (caminho) document.getElementById('cfgPastaDestino').value = caminho;
+}
+
+async function salvarConfiguracaoPainel() {
+  const status = document.getElementById('status-config');
+  const cfg = {
+    cnpj: document.getElementById('cfgCnpj').value.replace(/\D/g, ''),
+    cUFAutor: document.getElementById('cfgCuf').value,
+    certificado_pfx: document.getElementById('cfgPfx').value.trim(),
+    certificado_senha: document.getElementById('cfgSenha').value,
+    pasta_saida: document.getElementById('cfgPastaSaida').value.trim(),
+    pasta_destino: document.getElementById('cfgPastaDestino').value.trim(),
+  };
+
+  status.className = 'status-form';
+  status.textContent = 'Salvando...';
+
+  const resultado = await window.salvarConfiguracaoPainel(JSON.stringify(cfg));
+  const r = JSON.parse(resultado);
+
+  if (r.ok) {
+    status.className = 'status-form ok';
+    status.textContent = r.mensagem;
+    document.getElementById('cfgSenha').value = '';
+  } else {
+    status.className = 'status-form erro';
+    status.textContent = r.erro;
+  }
+}
+
 function reconfigurar() {
-  if (confirm('Isso vai apagar a configuração atual (certificado, pasta, CNPJ) e abrir o assistente de configuração de novo. As notas já baixadas continuam salvas. Confirma?')) {
+  if (confirm('Isso vai apagar a configuração atual e abrir o assistente de configuração do zero. As notas já baixadas continuam salvas. Confirma?')) {
     window.reconfigurar();
   }
 }

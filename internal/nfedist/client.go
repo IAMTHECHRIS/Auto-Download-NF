@@ -51,7 +51,9 @@ func NewClient(caminhoPfx, senhaPfx string) (*Client, error) {
 	}, nil
 }
 
-// envelope SOAP 1.1 — request
+// envelope SOAP 1.1 — request. %s final é o miolo <distNSU>...</distNSU> ou
+// <consChNFe>...</consChNFe> — os dois modos de consulta que usamos (ver
+// BuscarLote e BuscarPorChave).
 const envelopeTemplate = `<?xml version="1.0" encoding="utf-8"?>
 <soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
   <soap:Body>
@@ -61,9 +63,7 @@ const envelopeTemplate = `<?xml version="1.0" encoding="utf-8"?>
           <tpAmb>1</tpAmb>
           <cUFAutor>%s</cUFAutor>
           <CNPJ>%s</CNPJ>
-          <distNSU>
-            <ultNSU>%015d</ultNSU>
-          </distNSU>
+          %s
         </distDFeInt>
       </nfeDadosMsg>
     </nfeDistDFeInteresse>
@@ -112,7 +112,26 @@ type Resultado struct {
 // (que tolera reiniciar do 0 sempre). Quem chama isso precisa persistir o
 // último NSU em disco entre execuções — ver checkpoint.go.
 func (c *Client) BuscarLote(cUFAutor, cnpj string, ultNSU int) (Resultado, error) {
-	body := fmt.Sprintf(envelopeTemplate, cUFAutor, cnpj, ultNSU)
+	miolo := fmt.Sprintf("<distNSU><ultNSU>%015d</ultNSU></distNSU>", ultNSU)
+	return c.chamar(cUFAutor, cnpj, miolo)
+}
+
+// BuscarPorChave consulta UMA nota específica pela chave de acesso (44
+// dígitos) — modo consChNFe do mesmo webservice. Diferente de BuscarLote,
+// não mexe no NSU/checkpoint em nada: é uma consulta pontual, isolada, sem
+// risco de disparar o bloqueio de "Consumo Indevido" (esse é causado por
+// reiniciar a varredura sequencial do zero, não por consultas avulsas por
+// chave). Ainda assim, a SEFAZ provavelmente tem uma cota própria pra esse
+// tipo de consulta pontual (não documentada publicamente que eu tenha
+// encontrado) — por cautela, quem chama isso deve espaçar as chamadas e
+// não disparar em lote sem necessidade.
+func (c *Client) BuscarPorChave(cUFAutor, cnpj, chave string) (Resultado, error) {
+	miolo := fmt.Sprintf("<consChNFe><chNFe>%s</chNFe></consChNFe>", chave)
+	return c.chamar(cUFAutor, cnpj, miolo)
+}
+
+func (c *Client) chamar(cUFAutor, cnpj, miolo string) (Resultado, error) {
+	body := fmt.Sprintf(envelopeTemplate, cUFAutor, cnpj, miolo)
 
 	req, err := http.NewRequest(http.MethodPost, urlProducao, bytes.NewBufferString(body))
 	if err != nil {

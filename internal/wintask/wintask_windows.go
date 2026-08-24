@@ -26,16 +26,28 @@ func garantirTarefa(horario string) error {
 	// tarefa ou via o módulo ScheduledTasks do PowerShell. Uso o PowerShell,
 	// mesmo caminho já usado no instalador pros diálogos nativos.
 	//
+	// DOIS gatilhos: o diário às HH:MM (caso normal, PC já ligado) e um de
+	// boot com 2 min de atraso — cobre o caso de o PC ligar bem depois do
+	// horário (StartWhenAvailable já ajuda nisso, mas o gatilho de boot dá
+	// um horário mais previsível, sem depender só da recuperação do
+	// Windows). O atraso de 2 min existe pra deixar rede/sistema
+	// assentarem antes de tentar falar com a SEFAZ. A trava de "só 1x por
+	// dia" fica no próprio programa (cmd/coletor/main.go), não aqui — dois
+	// gatilhos no mesmo dia (ex: reinício de tarde por update) não devem
+	// gerar duas coletas.
+	//
 	// --agendado diz pro cmd/coletor que essa execução é automática, sem
 	// ninguém na frente do computador — roda só a coleta, sem abrir o
 	// painel gráfico.
 	script := fmt.Sprintf(`
 $ErrorActionPreference = "Stop"
 $acao = New-ScheduledTaskAction -Execute %s -Argument '--agendado'
-$gatilho = New-ScheduledTaskTrigger -Daily -At '%s'
+$gatilhoDiario = New-ScheduledTaskTrigger -Daily -At '%s'
+$gatilhoBoot = New-ScheduledTaskTrigger -AtStartup
+$gatilhoBoot.Delay = 'PT2M'
 $config = New-ScheduledTaskSettingsSet -StartWhenAvailable -ExecutionTimeLimit (New-TimeSpan -Hours 2)
 $principal = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive -RunLevel Limited
-Register-ScheduledTask -TaskName %s -Action $acao -Trigger $gatilho -Settings $config -Principal $principal -Description "Coleta diaria de notas fiscais (NFe/NFSe) via SEFAZ. Criada automaticamente." -Force | Out-Null
+Register-ScheduledTask -TaskName %s -Action $acao -Trigger @($gatilhoDiario, $gatilhoBoot) -Settings $config -Principal $principal -Description "Coleta diaria de notas fiscais (NFe/NFSe) via SEFAZ. Criada automaticamente." -Force | Out-Null
 `, aspasPS(exe), horario, aspasPS(nomeTarefa))
 
 	saida, err := rodarPowerShell(script)
