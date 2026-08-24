@@ -4,56 +4,19 @@
 // em outros sistemas, EnsureDailyTask não faz nada (retorna nil).
 package wintask
 
-import (
-	"fmt"
-	"os"
-	"os/exec"
-	"runtime"
-)
+import "runtime"
 
 const nomeTarefa = "ColetaNotasFiscaisAutomatica"
 
 // EnsureDailyTask garante que existe uma tarefa agendada rodando este
-// executável todo dia no horário informado (formato "HH:MM"). Se a tarefa
-// já existe, não faz nada (idempotente — seguro chamar toda execução).
+// executável todo dia no horário informado (formato "HH:MM"), com "rodar
+// assim que possível" ligado: se o PC estiver desligado (ou o usuário
+// deslogado) nesse horário, a tarefa roda na próxima vez que ele
+// ligar/entrar, em vez de simplesmente pular o dia. Idempotente — seguro
+// chamar toda execução, só cria na primeira vez.
 func EnsureDailyTask(horario string) error {
 	if runtime.GOOS != "windows" {
 		return nil // no-op fora do Windows
 	}
-
-	if existeTarefa() {
-		return nil
-	}
-
-	exe, err := os.Executable()
-	if err != nil {
-		return fmt.Errorf("descobrir caminho do executável: %w", err)
-	}
-
-	cmd := exec.Command("schtasks",
-		"/Create",
-		"/SC", "DAILY",
-		"/TN", nomeTarefa,
-		// --agendado diz pro cmd/coletor que essa execução é automática, sem
-		// ninguém na frente do computador — roda só a coleta, sem abrir o
-		// painel gráfico. Sem essa flag, o Windows tentaria mostrar uma
-		// janela às 08h da manhã sem motivo.
-		"/TR", fmt.Sprintf(`"%s" --agendado`, exe),
-		"/ST", horario,
-		"/F", // sobrescreve sem perguntar, se por algum motivo já existir mas existeTarefa() não pegou
-	)
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("criar tarefa agendada: %w — saída: %s", err, string(out))
-	}
-
-	fmt.Printf("Tarefa agendada criada: roda sozinho todo dia às %s.\n", horario)
-	fmt.Println("(Não precisa de ninguém configurando isso manualmente — já está pronto.)")
-
-	return nil
-}
-
-func existeTarefa() bool {
-	cmd := exec.Command("schtasks", "/Query", "/TN", nomeTarefa)
-	return cmd.Run() == nil
+	return garantirTarefa(horario)
 }
