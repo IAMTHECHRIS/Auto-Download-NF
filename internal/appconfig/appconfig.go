@@ -31,6 +31,14 @@ type Config struct {
 // duplo-clique num .exe já deixa o diretório atual igual à pasta dele, e
 // aqui no desenvolvimento (rodando com "go run") isso também funciona
 // direto, sem precisar de exe fixo.
+// Existe diz se já existe um config.json salvo — usado por quem quiser
+// decidir COMO configurar (janela gráfica, assistente de texto, etc.)
+// antes de chamar Load().
+func Existe() bool {
+	_, err := os.Stat(configPath())
+	return err == nil
+}
+
 func configPath() string {
 	wd, err := os.Getwd()
 	if err != nil {

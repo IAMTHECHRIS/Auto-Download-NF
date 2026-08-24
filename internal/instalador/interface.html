@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Configuração — Coletor de Notas Fiscais</title>
+<style>
+  :root {
+    --bg: #0f1420;
+    --card: #171d2e;
+    --border: #2a3352;
+    --text: #e8ecf7;
+    --muted: #8b93ab;
+    --accent: #4f7cff;
+    --accent-hover: #6690ff;
+    --ok: #3ecf8e;
+    --warn: #f5a623;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+    height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  .card {
+    width: 480px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 28px 32px 24px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  h1 {
+    font-size: 18px;
+    margin: 0 0 4px;
+    font-weight: 600;
+  }
+  .subtitle {
+    font-size: 12.5px;
+    color: var(--muted);
+    margin: 0 0 22px;
+  }
+  label {
+    display: block;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    margin: 16px 0 6px;
+  }
+  label:first-of-type { margin-top: 0; }
+  input[type=text], input[type=password] {
+    width: 100%;
+    padding: 10px 12px;
+    background: #0d1220;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13.5px;
+    outline: none;
+    -webkit-user-select: text;
+    user-select: text;
+  }
+  input:focus { border-color: var(--accent); }
+  .row { display: flex; gap: 8px; }
+  .row input { flex: 1; }
+  .btn-secundario {
+    padding: 10px 14px;
+    background: #232b45;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  .btn-secundario:hover { background: #2b3454; }
+  .aviso {
+    background: rgba(245, 166, 35, 0.1);
+    border: 1px solid rgba(245, 166, 35, 0.35);
+    color: #f5c778;
+    font-size: 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    margin-top: 14px;
+    line-height: 1.5;
+  }
+  .btn-principal {
+    width: 100%;
+    margin-top: 24px;
+    padding: 12px;
+    background: var(--accent);
+    border: none;
+    border-radius: 8px;
+    color: white;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn-principal:hover { background: var(--accent-hover); }
+  .btn-principal:disabled { opacity: 0.5; cursor: default; }
+  .status {
+    margin-top: 14px;
+    font-size: 12.5px;
+    text-align: center;
+    min-height: 16px;
+  }
+  .status.ok { color: var(--ok); }
+  .status.erro { color: #ff6b6b; }
+  .rodape {
+    text-align: center;
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 18px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Coletor de Notas Fiscais</h1>
+    <p class="subtitle">Configuração inicial — só precisa fazer isso uma vez</p>
+
+    <label>CNPJ da empresa</label>
+    <input type="text" id="cnpj" placeholder="00000000000000" maxlength="14">
+
+    <label>Código IBGE do estado</label>
+    <input type="text" id="cuf" placeholder="35 (São Paulo)" value="35">
+
+    <label>Certificado digital (.pfx)</label>
+    <div class="row">
+      <input type="text" id="pfx" placeholder="Nenhum arquivo selecionado" readonly>
+      <button class="btn-secundario" onclick="escolherPfx()">Procurar…</button>
+    </div>
+
+    <label>Senha do certificado</label>
+    <input type="password" id="senha" placeholder="••••••••">
+
+    <label>Pasta onde as notas serão salvas</label>
+    <div class="row">
+      <input type="text" id="pasta" placeholder="Nenhuma pasta selecionada" readonly>
+      <button class="btn-secundario" onclick="escolherPasta()">Procurar…</button>
+    </div>
+    <div class="aviso">
+      ⚠ Escolha uma pasta <strong>local</strong>, fora do OneDrive/Google Drive/Dropbox.
+      Essa é uma área de chegada — você confere as notas antes de mover pra
+      pasta sincronizada de verdade.
+    </div>
+
+    <button class="btn-principal" id="btnSalvar" onclick="salvar()">Salvar e concluir</button>
+    <div class="status" id="status"></div>
+    <p class="rodape">Depois disso, o programa roda sozinho todo dia — nada mais pra configurar.</p>
+  </div>
+
+<script>
+async function escolherPfx() {
+  const caminho = await window.escolherArquivo();
+  if (caminho) document.getElementById('pfx').value = caminho;
+}
+async function escolherPasta() {
+  const caminho = await window.escolherPasta();
+  if (caminho) document.getElementById('pasta').value = caminho;
+}
+async function salvar() {
+  const btn = document.getElementById('btnSalvar');
+  const status = document.getElementById('status');
+  const cfg = {
+    cnpj: document.getElementById('cnpj').value.trim(),
+    cUFAutor: document.getElementById('cuf').value.trim(),
+    certificado_pfx: document.getElementById('pfx').value.trim(),
+    certificado_senha: document.getElementById('senha').value,
+    pasta_saida: document.getElementById('pasta').value.trim(),
+  };
+
+  if (!cfg.cnpj || !cfg.certificado_pfx || !cfg.pasta_saida) {
+    status.textContent = 'Preencha CNPJ, certificado e pasta de saída.';
+    status.className = 'status erro';
+    return;
+  }
+
+  btn.disabled = true;
+  status.textContent = 'Validando certificado...';
+  status.className = 'status';
+
+  const resultado = await window.salvarConfiguracao(JSON.stringify(cfg));
+  const r = JSON.parse(resultado);
+
+  if (r.ok) {
+    status.textContent = r.mensagem || 'Configuração salva com sucesso!';
+    status.className = 'status ok';
+    setTimeout(() => window.fecharJanela(), 1800);
+  } else {
+    status.textContent = r.erro || 'Erro ao salvar.';
+    status.className = 'status erro';
+    btn.disabled = false;
+  }
+}
+</script>
+</body>
+</html>

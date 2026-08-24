@@ -17,3 +17,10 @@ dist/
 
 # Notas internas (nome da empresa, infra específica) — não é público
 OPERACAO_INTERNA.md
+
+# Nunca deveriam existir aqui, mas se algum comando rodar sem $HOME
+# configurado direito, cria essas pastas locais com dado sensível
+# (ex: sessão do Bitwarden CLI). Bloqueio de segurança extra.
+.config/
+.local/
+mingw-case-fix/
