@@ -128,31 +128,19 @@ $owner.Dispose()
 	})
 
 	w.Bind("escolherPasta", func() string {
-		// FolderBrowserDialog é o diálogo antigo (SHBrowseForFolder) e tinha
-		// o mesmo tipo de bug do OpenFileDialog original. Em vez de insistir
-		// nele, reaproveito o OpenFileDialog — que já se provou funcionando
-		// pro certificado — com um truque clássico: o usuário navega até a
-		// pasta e clica "Abrir" com o nome de arquivo fixo abaixo; a gente
-		// descarta o nome e fica só com o diretório escolhido.
+		// As duas tentativas anteriores (FolderBrowserDialog do WinForms, e
+		// depois um OpenFileDialog "enganado" com CheckFileExists=false pra
+		// fingir que escolhe pasta) usam WinForms por baixo — mesma família,
+		// mesmo tipo de falha possível. Essa aqui é um caminho REALMENTE
+		// diferente: Shell.Application é COM puro do Explorer do Windows,
+		// sem WinForms, sem STA, sem Form-dona — é a mesma API que o
+		// Explorer usa internamente há 20+ anos.
 		caminho, err := escolherViaPowerShell(`
-Add-Type -AssemblyName System.Windows.Forms
-$owner = New-Object System.Windows.Forms.Form
-$owner.TopMost = $true
-$owner.ShowInTaskbar = $false
-$owner.StartPosition = 'CenterScreen'
-$owner.Size = New-Object System.Drawing.Size(0,0)
-$owner.Show()
-$owner.Activate()
-$f = New-Object System.Windows.Forms.OpenFileDialog
-$f.Title = "Navegue até a pasta e clique em Abrir (o nome do arquivo abaixo não importa)"
-$f.CheckFileExists = $false
-$f.ValidateNames = $false
-$f.FileName = "Selecione esta pasta"
-$f.Filter = "Selecionar pasta|*.selecionar-pasta"
-if ($f.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
-    Write-Output ([System.IO.Path]::GetDirectoryName($f.FileName))
+$shell = New-Object -ComObject Shell.Application
+$pasta = $shell.BrowseForFolder(0, "Selecione a pasta de saída (fora de sync de nuvem)", 0, 0)
+if ($pasta -ne $null) {
+    Write-Output $pasta.Self.Path
 }
-$owner.Dispose()
 `)
 		if err != nil {
 			return ""
