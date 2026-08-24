@@ -11,10 +11,13 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"syscall"
+	"time"
 
 	"sieg-automation/internal/appconfig"
 	"sieg-automation/internal/certload"
@@ -43,18 +46,51 @@ func init() {
 // diálogo nunca encosta no COM do WebView2: são processos diferentes,
 // cada um com sua própria memória.
 func escolherViaPowerShell(script string) (string, error) {
-	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script)
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-STA", "-WindowStyle", "Hidden", "-Command", script)
 	// HideWindow por si só ainda cria a janela do console (só oculta depois),
 	// o que gera aquele flash/delay. CREATE_NO_WINDOW (0x08000000) diz pro
 	// Windows nem criar a janela — processo nasce sem console nenhum.
 	const createNoWindow = 0x08000000
 	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
-	var saida bytes.Buffer
+	var saida, erros bytes.Buffer
 	cmd.Stdout = &saida
-	if err := cmd.Run(); err != nil {
+	cmd.Stderr = &erros
+	err := cmd.Run()
+
+	// Diagnóstico: grava SEMPRE que o PowerShell escrever algo em stderr ou
+	// falhar, num arquivo ao lado do .exe. Já tentei três vezes "no escuro"
+	// sem máquina Windows pra testar — dessa vez, se continuar falhando, o
+	// arquivo abaixo tem a mensagem de erro .NET real, não mais um chute.
+	if err != nil || erros.Len() > 0 {
+		registrarDiagnostico(script, saida.String(), erros.String(), err)
+	}
+
+	if err != nil {
 		return "", err
 	}
 	return strings.TrimSpace(saida.String()), nil
+}
+
+func registrarDiagnostico(script, stdout, stderr string, err error) {
+	exePath, _ := os.Executable()
+	logPath := filepath.Join(filepath.Dir(exePath), "diagnostico-dialogo.log")
+
+	linhaErr := "nil"
+	if err != nil {
+		linhaErr = err.Error()
+	}
+
+	conteudo := fmt.Sprintf(
+		"=== %s ===\nerro Go: %s\nstdout: %q\nstderr: %q\nscript:\n%s\n\n",
+		time.Now().Format(time.RFC3339), linhaErr, stdout, stderr, script,
+	)
+
+	f, abrirErr := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if abrirErr != nil {
+		return
+	}
+	defer f.Close()
+	f.WriteString(conteudo)
 }
 
 // Executar abre a janela de configuração e bloqueia até o usuário terminar

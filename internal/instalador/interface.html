@@ -121,15 +121,42 @@
     color: var(--muted);
     margin-top: 18px;
   }
+  .revisao-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .revisao-item:last-child { border-bottom: none; }
+  .revisao-item .rotulo { color: var(--muted); }
+  .revisao-item .valor {
+    text-align: right;
+    word-break: break-all;
+    max-width: 65%;
+  }
+  .btn-voltar {
+    width: 100%;
+    margin-top: 10px;
+    padding: 10px;
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    color: var(--muted);
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .btn-voltar:hover { color: var(--text); border-color: var(--muted); }
 </style>
 </head>
 <body>
-  <div class="card">
+  <div class="card" id="view-form">
     <h1>Coletor de Notas Fiscais</h1>
     <p class="subtitle">Configuração inicial — só precisa fazer isso uma vez</p>
 
     <label>CNPJ da empresa</label>
-    <input type="text" id="cnpj" placeholder="00000000000000" maxlength="14">
+    <input type="text" id="cnpj" placeholder="00.000.000/0000-00" maxlength="18" inputmode="numeric">
 
     <label>Estado</label>
     <select id="cuf">
@@ -182,12 +209,51 @@
       pasta sincronizada de verdade.
     </div>
 
-    <button class="btn-principal" id="btnSalvar" onclick="salvar()">Salvar e concluir</button>
+    <button class="btn-principal" id="btnSalvar" onclick="revisar()">Revisar e concluir</button>
     <div class="status" id="status"></div>
     <p class="rodape">Depois disso, o programa roda sozinho todo dia — nada mais pra configurar.</p>
   </div>
 
+  <div class="card" id="view-revisao" style="display:none">
+    <h1>Confira antes de salvar</h1>
+    <p class="subtitle">Se estiver tudo certo, confirme. Se não, volte e ajuste.</p>
+
+    <div class="revisao-item">
+      <span class="rotulo">CNPJ</span>
+      <span class="valor" id="rev-cnpj"></span>
+    </div>
+    <div class="revisao-item">
+      <span class="rotulo">Estado</span>
+      <span class="valor" id="rev-estado"></span>
+    </div>
+    <div class="revisao-item">
+      <span class="rotulo">Certificado</span>
+      <span class="valor" id="rev-pfx"></span>
+    </div>
+    <div class="revisao-item">
+      <span class="rotulo">Pasta de saída</span>
+      <span class="valor" id="rev-pasta"></span>
+    </div>
+
+    <button class="btn-principal" id="btnConfirmar" onclick="confirmarSalvar()">Confirmar e salvar</button>
+    <button class="btn-voltar" onclick="voltarParaForm()">Voltar e editar</button>
+    <div class="status" id="status-revisao"></div>
+  </div>
+
 <script>
+function maskCNPJ(valor) {
+  const digitos = valor.replace(/\D/g, '').slice(0, 14);
+  let saida = digitos.slice(0, 2);
+  if (digitos.length > 2) saida += '.' + digitos.slice(2, 5);
+  if (digitos.length > 5) saida += '.' + digitos.slice(5, 8);
+  if (digitos.length > 8) saida += '/' + digitos.slice(8, 12);
+  if (digitos.length > 12) saida += '-' + digitos.slice(12, 14);
+  return saida;
+}
+document.getElementById('cnpj').addEventListener('input', (e) => {
+  e.target.value = maskCNPJ(e.target.value);
+});
+
 async function escolherPfx() {
   const caminho = await window.escolherArquivo();
   if (caminho) document.getElementById('pfx').value = caminho;
@@ -196,22 +262,48 @@ async function escolherPasta() {
   const caminho = await window.escolherPasta();
   if (caminho) document.getElementById('pasta').value = caminho;
 }
-async function salvar() {
-  const btn = document.getElementById('btnSalvar');
+
+function nomeBase(caminho) {
+  return caminho.split(/[\\/]/).pop();
+}
+
+function revisar() {
   const status = document.getElementById('status');
+  const cnpjDigitos = document.getElementById('cnpj').value.replace(/\D/g, '');
+  const pfx = document.getElementById('pfx').value.trim();
+  const pasta = document.getElementById('pasta').value.trim();
+
+  if (cnpjDigitos.length !== 14 || !pfx || !pasta) {
+    status.textContent = 'Preencha CNPJ (14 dígitos), certificado e pasta de saída.';
+    status.className = 'status erro';
+    return;
+  }
+  status.textContent = '';
+
+  document.getElementById('rev-cnpj').textContent = maskCNPJ(cnpjDigitos);
+  document.getElementById('rev-estado').textContent = document.getElementById('cuf').selectedOptions[0].text;
+  document.getElementById('rev-pfx').textContent = nomeBase(pfx);
+  document.getElementById('rev-pasta').textContent = pasta;
+
+  document.getElementById('view-form').style.display = 'none';
+  document.getElementById('view-revisao').style.display = 'block';
+}
+
+function voltarParaForm() {
+  document.getElementById('view-revisao').style.display = 'none';
+  document.getElementById('view-form').style.display = 'block';
+}
+
+async function confirmarSalvar() {
+  const btn = document.getElementById('btnConfirmar');
+  const status = document.getElementById('status-revisao');
   const cfg = {
-    cnpj: document.getElementById('cnpj').value.trim(),
+    cnpj: document.getElementById('cnpj').value.replace(/\D/g, ''),
     cUFAutor: document.getElementById('cuf').value.trim(),
     certificado_pfx: document.getElementById('pfx').value.trim(),
     certificado_senha: document.getElementById('senha').value,
     pasta_saida: document.getElementById('pasta').value.trim(),
   };
-
-  if (!cfg.cnpj || !cfg.certificado_pfx || !cfg.pasta_saida) {
-    status.textContent = 'Preencha CNPJ, certificado e pasta de saída.';
-    status.className = 'status erro';
-    return;
-  }
 
   btn.disabled = true;
   status.textContent = 'Validando certificado...';
