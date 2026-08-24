@@ -31,25 +31,40 @@ func Executar() bool {
 	w.SetTitle("Coletor de Notas Fiscais — Configuração")
 	w.SetSize(560, 720, webview.HintFixed)
 
+	// IMPORTANTE: diálogos nativos do Windows (abrir arquivo/pasta) precisam
+	// rodar na MESMA thread que criou a janela — o Bind() do webview roda o
+	// callback numa goroutine separada, então chamar o diálogo direto ali
+	// trava/falha silenciosamente. w.Dispatch() agenda a chamada pra rodar
+	// na thread certa; o canal serve só pra esperar o resultado voltar.
 	w.Bind("escolherArquivo", func() string {
-		caminho, err := dialog.File().
-			Filter("Certificado digital", "pfx").
-			Title("Selecione o certificado .pfx").
-			Load()
-		if err != nil {
-			return ""
-		}
-		return caminho
+		resultado := make(chan string, 1)
+		w.Dispatch(func() {
+			caminho, err := dialog.File().
+				Filter("Certificado digital", "pfx").
+				Title("Selecione o certificado .pfx").
+				Load()
+			if err != nil {
+				resultado <- ""
+				return
+			}
+			resultado <- caminho
+		})
+		return <-resultado
 	})
 
 	w.Bind("escolherPasta", func() string {
-		caminho, err := dialog.Directory().
-			Title("Selecione a pasta de saída (fora de sync de nuvem)").
-			Browse()
-		if err != nil {
-			return ""
-		}
-		return caminho
+		resultado := make(chan string, 1)
+		w.Dispatch(func() {
+			caminho, err := dialog.Directory().
+				Title("Selecione a pasta de saída (fora de sync de nuvem)").
+				Browse()
+			if err != nil {
+				resultado <- ""
+				return
+			}
+			resultado <- caminho
+		})
+		return <-resultado
 	})
 
 	w.Bind("salvarConfiguracao", func(cfgJSON string) string {
