@@ -173,7 +173,7 @@
     <div class="barra">
       <input type="text" id="busca" placeholder="Buscar por fornecedor, número ou tipo..." oninput="renderizar()">
       <span id="status-busca"></span>
-      <button class="btn-principal" id="btnBuscar" onclick="buscarAgora()">Buscar notas agora</button>
+      <button class="btn-principal" id="btnBuscar" onclick="clicarBuscarAgora()">Buscar notas agora</button>
     </div>
     <main>
       <table id="tabela">
@@ -204,7 +204,7 @@
         <label>Chave de acesso (44 dígitos)</label>
         <input type="text" id="chaveInput" maxlength="44" placeholder="00000000000000000000000000000000000000000000" inputmode="numeric">
       </div>
-      <button class="btn-principal" id="btnBuscarChave" onclick="buscarPorChave()">Buscar essa nota</button>
+      <button class="btn-principal" id="btnBuscarChave" onclick="clicarBuscarPorChave()">Buscar essa nota</button>
       <div class="status-form" id="status-chave"></div>
     </div>
   </section>
@@ -218,9 +218,16 @@
         pasta do Google Drive). O que aparecer aqui embaixo é o que ainda não
         foi encontrado lá. Se o seu processo é copiar manualmente pra lá depois
         de conferir, é normal essa lista ter itens — são só os que ainda não
-        foram copiados, não necessariamente perdidos.
+        foram copiados, não necessariamente perdidos. A comparação é só pelo
+        NOME do arquivo, procurando dentro de TODAS as subpastas da pasta de
+        destino — não importa em que ANO/MES ele esteja organizado lá.
+        Só entram nessa comparação notas que ESTE programa baixou (o que
+        está no catálogo) — arquivos antigos organizados manualmente antes,
+        de anos que este programa nunca buscou, não aparecem aqui (não tem
+        como comparar o que a gente nunca soube que existia).
       </p>
-      <button class="btn-principal" onclick="verificarCopia()">Verificar agora</button>
+      <p class="explicacao" id="pastaDestinoAtual" style="font-weight:600; color:var(--text);"></p>
+      <button class="btn-principal" onclick="clicarVerificarCopia()">Verificar agora</button>
       <div class="status-form" id="status-verificar"></div>
       <div id="resultado-verificar" style="margin-top: 16px;"></div>
     </div>
@@ -289,8 +296,8 @@
         </div>
       </div>
 
-      <button class="btn-principal" onclick="salvarConfiguracaoPainel()">Salvar configuração</button>
-      <button class="btn-link" onclick="reconfigurar()">Refazer configuração do zero…</button>
+      <button class="btn-principal" onclick="clicarSalvarConfiguracao()">Salvar configuração</button>
+      <button class="btn-link" onclick="clicarReconfigurar()">Refazer configuração do zero…</button>
       <div class="status-form" id="status-config"></div>
     </div>
   </section>
@@ -301,7 +308,8 @@ let entradas = [];
 function mudarAba(nome) {
   document.querySelectorAll('nav.abas button').forEach(b => b.classList.toggle('ativa', b.dataset.aba === nome));
   document.querySelectorAll('section.aba').forEach(s => s.classList.toggle('ativa', s.id === 'aba-' + nome));
-  if (nome === 'config') carregarConfiguracao();
+  if (nome === 'config') atualizarFormConfiguracao();
+  if (nome === 'verificar') mostrarPastaDestinoAtual();
 }
 
 function formatarValor(v) {
@@ -367,7 +375,13 @@ async function carregarCatalogo() {
   renderizar();
 }
 
-async function buscarAgora() {
+// NOMES DAS FUNÇÕES JS ABAIXO SÃO DE PROPÓSITO DIFERENTES dos nomes
+// registrados no Go (window.buscarAgora, window.verificarCopia, etc). Uma
+// function declaration global com o MESMO nome de um bind sobrescreve a
+// ponte pro Go — ela passa a chamar a si mesma pra sempre, sem nunca sair
+// do JavaScript. Já caímos nisso antes (ver escolherPasta do instalador) e
+// caiu de novo aqui em 6 lugares até este fix — não repetir esse padrão.
+async function clicarBuscarAgora() {
   const btn = document.getElementById('btnBuscar');
   const status = document.getElementById('status-busca');
   btn.disabled = true;
@@ -389,7 +403,7 @@ async function buscarAgora() {
 }
 
 // --- Buscar por chave ---
-async function buscarPorChave() {
+async function clicarBuscarPorChave() {
   const btn = document.getElementById('btnBuscarChave');
   const status = document.getElementById('status-chave');
   const chave = document.getElementById('chaveInput').value.replace(/\D/g, '');
@@ -420,7 +434,16 @@ async function buscarPorChave() {
 }
 
 // --- Verificar cópia ---
-async function verificarCopia() {
+async function mostrarPastaDestinoAtual() {
+  const resultado = await window.carregarConfiguracao();
+  const c = JSON.parse(resultado);
+  const alvo = document.getElementById('pastaDestinoAtual');
+  alvo.textContent = c.pasta_destino
+    ? ('Comparando com: ' + c.pasta_destino)
+    : 'Nenhuma pasta de destino configurada ainda — defina na aba Configuração.';
+}
+
+async function clicarVerificarCopia() {
   const status = document.getElementById('status-verificar');
   const div = document.getElementById('resultado-verificar');
   status.className = 'status-form';
@@ -454,7 +477,7 @@ async function verificarCopia() {
 }
 
 // --- Configuração ---
-async function carregarConfiguracao() {
+async function atualizarFormConfiguracao() {
   const resultado = await window.carregarConfiguracao();
   const c = JSON.parse(resultado);
   document.getElementById('cfgCnpj').value = c.cnpj || '';
@@ -477,7 +500,7 @@ async function escolherCfgPastaDestino() {
   if (caminho) document.getElementById('cfgPastaDestino').value = caminho;
 }
 
-async function salvarConfiguracaoPainel() {
+async function clicarSalvarConfiguracao() {
   const status = document.getElementById('status-config');
   const cfg = {
     cnpj: document.getElementById('cfgCnpj').value.replace(/\D/g, ''),
@@ -504,14 +527,14 @@ async function salvarConfiguracaoPainel() {
   }
 }
 
-function reconfigurar() {
+function clicarReconfigurar() {
   if (confirm('Isso vai apagar a configuração atual e abrir o assistente de configuração do zero. As notas já baixadas continuam salvas. Confirma?')) {
     window.reconfigurar();
   }
 }
 
 carregarCatalogo();
-buscarAgora();
+clicarBuscarAgora();
 </script>
 </body>
 </html>
