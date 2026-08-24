@@ -11,6 +11,8 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -35,6 +37,43 @@ func init() {
 	runtime.LockOSThread()
 }
 
+// debugLog registra CADA passo da instalação (clique em botão, script
+// PowerShell rodado, saída, erro, tempo) num único arquivo ao lado do
+// .exe. Existe só pra diagnóstico — depois de várias tentativas de
+// correção sem uma máquina Windows disponível pra testar, é mais rápido
+// pedir esse arquivo pro usuário do que continuar chutando.
+var debugLog = log.New(io.Discard, "", 0)
+
+func iniciarDebugLog() *os.File {
+	exePath, err := os.Executable()
+	if err != nil {
+		exePath = "."
+	}
+	logPath := filepath.Join(filepath.Dir(exePath), "instalador-debug.log")
+
+	// O_TRUNC: cada execução começa um log novo e limpo — mais fácil de ler
+	// e de mandar pra mim do que um arquivo que cresce pra sempre.
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return nil
+	}
+	debugLog = log.New(f, "", log.LstdFlags|log.Lmicroseconds)
+	debugLog.Printf("=== instalador iniciado === GOOS=%s GOARCH=%s", runtime.GOOS, runtime.GOARCH)
+
+	if info, err := escolherViaPowerShell(`
+Write-Output ("Windows: " + [Environment]::OSVersion.VersionString)
+Write-Output ("PowerShell: " + $PSVersionTable.PSVersion.ToString())
+Write-Output ("64-bit OS: " + [Environment]::Is64BitOperatingSystem)
+Write-Output ("Usuario: " + [Environment]::UserName)
+`); err == nil {
+		debugLog.Printf("info do sistema:\n%s", info)
+	} else {
+		debugLog.Printf("falha ao coletar info do sistema: %v", err)
+	}
+
+	return f
+}
+
 // escolherViaPowerShell abre um diálogo nativo do Windows rodando um
 // script PowerShell EM OUTRO PROCESSO (não outra goroutine, outro
 // processo mesmo). Isso não é só preferência — é o que resolve o bug
@@ -46,6 +85,7 @@ func init() {
 // diálogo nunca encosta no COM do WebView2: são processos diferentes,
 // cada um com sua própria memória.
 func escolherViaPowerShell(script string) (string, error) {
+	inicio := time.Now()
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-STA", "-WindowStyle", "Hidden", "-Command", script)
 	// HideWindow por si só ainda cria a janela do console (só oculta depois),
 	// o que gera aquele flash/delay. CREATE_NO_WINDOW (0x08000000) diz pro
@@ -56,14 +96,16 @@ func escolherViaPowerShell(script string) (string, error) {
 	cmd.Stdout = &saida
 	cmd.Stderr = &erros
 	err := cmd.Run()
+	duracao := time.Since(inicio)
 
-	// Diagnóstico: grava SEMPRE que o PowerShell escrever algo em stderr ou
-	// falhar, num arquivo ao lado do .exe. Já tentei três vezes "no escuro"
-	// sem máquina Windows pra testar — dessa vez, se continuar falhando, o
-	// arquivo abaixo tem a mensagem de erro .NET real, não mais um chute.
-	if err != nil || erros.Len() > 0 {
-		registrarDiagnostico(script, saida.String(), erros.String(), err)
+	linhaErr := "nil"
+	if err != nil {
+		linhaErr = err.Error()
 	}
+	debugLog.Printf(
+		"powershell rodou em %s | erro Go: %s | stdout: %q | stderr: %q | script: %s",
+		duracao, linhaErr, saida.String(), erros.String(), strings.TrimSpace(script),
+	)
 
 	if err != nil {
 		return "", err
@@ -71,39 +113,30 @@ func escolherViaPowerShell(script string) (string, error) {
 	return strings.TrimSpace(saida.String()), nil
 }
 
-func registrarDiagnostico(script, stdout, stderr string, err error) {
-	exePath, _ := os.Executable()
-	logPath := filepath.Join(filepath.Dir(exePath), "diagnostico-dialogo.log")
-
-	linhaErr := "nil"
-	if err != nil {
-		linhaErr = err.Error()
-	}
-
-	conteudo := fmt.Sprintf(
-		"=== %s ===\nerro Go: %s\nstdout: %q\nstderr: %q\nscript:\n%s\n\n",
-		time.Now().Format(time.RFC3339), linhaErr, stdout, stderr, script,
-	)
-
-	f, abrirErr := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if abrirErr != nil {
-		return
-	}
-	defer f.Close()
-	f.WriteString(conteudo)
-}
-
 // Executar abre a janela de configuração e bloqueia até o usuário terminar
 // (ou fechar a janela). Devolve true se salvou uma configuração válida.
 func Executar() bool {
+	if f := iniciarDebugLog(); f != nil {
+		defer f.Close()
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			debugLog.Printf("PANIC recuperado: %v", r)
+			panic(r)
+		}
+	}()
+
 	salvou := false
 
+	debugLog.Printf("criando janela webview...")
 	w := webview.New(false)
 	defer w.Destroy()
 	w.SetTitle("Coletor de Notas Fiscais — Configuração")
 	w.SetSize(560, 720, webview.HintFixed)
+	debugLog.Printf("janela criada")
 
 	w.Bind("escolherArquivo", func() string {
+		debugLog.Printf(">> clique: escolherArquivo (certificado)")
 		caminho, err := escolherViaPowerShell(`
 Add-Type -AssemblyName System.Windows.Forms
 $owner = New-Object System.Windows.Forms.Form
@@ -121,6 +154,7 @@ if ($f.ShowDialog($owner) -eq [System.Windows.Forms.DialogResult]::OK) {
 }
 $owner.Dispose()
 `)
+		debugLog.Printf("<< resultado escolherArquivo: caminho=%q err=%v", caminho, err)
 		if err != nil {
 			return ""
 		}
@@ -128,6 +162,7 @@ $owner.Dispose()
 	})
 
 	w.Bind("escolherPasta", func() string {
+		debugLog.Printf(">> clique: escolherPasta")
 		// Shell.Application é COM puro do Explorer (diferente das tentativas
 		// anteriores em WinForms) — mas SEM um HWND-dono, o diálogo nasce
 		// atrás da janela principal do webview (mesmo sintoma silencioso do
@@ -151,6 +186,7 @@ if ($pasta -ne $null) {
     Write-Output $pasta.Self.Path
 }
 `)
+		debugLog.Printf("<< resultado escolherPasta: caminho=%q err=%v", caminho, err)
 		if err != nil {
 			return ""
 		}
@@ -158,8 +194,10 @@ if ($pasta -ne $null) {
 	})
 
 	w.Bind("salvarConfiguracao", func(cfgJSON string) string {
+		debugLog.Printf(">> clique: salvarConfiguracao | payload=%s", mascarSenha(cfgJSON))
 		var cfg appconfig.Config
 		if err := json.Unmarshal([]byte(cfgJSON), &cfg); err != nil {
+			debugLog.Printf("<< erro: json inválido: %v", err)
 			return respostaErro(fmt.Sprintf("dados inválidos: %v", err))
 		}
 
@@ -167,25 +205,43 @@ if ($pasta -ne $null) {
 		// ou o arquivo for inválido, o usuário fica sabendo na hora, não
 		// só quando o coletor rodar sozinho de madrugada.
 		if _, err := certload.FromPFXValidado(cfg.CertificadoPfx, cfg.CertificadoSenha); err != nil {
+			debugLog.Printf("<< erro: certificado inválido: %v", err)
 			return respostaErro(fmt.Sprintf("certificado: %v", err))
 		}
 
 		if err := appconfig.Save(cfg); err != nil {
+			debugLog.Printf("<< erro: salvar config: %v", err)
 			return respostaErro(fmt.Sprintf("salvar config: %v", err))
 		}
 
 		salvou = true
+		debugLog.Printf("<< configuração salva com sucesso")
 		return respostaOK("Certificado validado e configuração salva!")
 	})
 
 	w.Bind("fecharJanela", func() {
+		debugLog.Printf(">> fecharJanela chamado")
 		w.Terminate()
 	})
 
 	w.SetHtml(interfaceHTML)
+	debugLog.Printf("HTML carregado, iniciando loop principal (w.Run)...")
 	w.Run()
+	debugLog.Printf("w.Run() retornou, encerrando. salvou=%v", salvou)
 
 	return salvou
+}
+
+func mascarSenha(cfgJSON string) string {
+	var m map[string]any
+	if json.Unmarshal([]byte(cfgJSON), &m) != nil {
+		return "(não foi possível decodificar pra log)"
+	}
+	if _, ok := m["certificado_senha"]; ok {
+		m["certificado_senha"] = "***"
+	}
+	b, _ := json.Marshal(m)
+	return string(b)
 }
 
 func respostaOK(msg string) string {

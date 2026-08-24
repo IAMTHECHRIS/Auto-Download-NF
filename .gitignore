@@ -15,6 +15,10 @@ dist/
 # Checkpoints (estado local de execução, não é código)
 .checkpoint-*
 
+# Log de diagnóstico do instalador (gerado ao rodar o .exe no Windows)
+instalador-debug.log
+diagnostico-dialogo.log
+
 # Notas internas (nome da empresa, infra específica) — não é público
 OPERACAO_INTERNA.md
 
