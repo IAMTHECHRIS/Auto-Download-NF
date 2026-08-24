@@ -7,15 +7,18 @@
 package instalador
 
 import (
+	"bytes"
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"os/exec"
 	"runtime"
+	"strings"
+	"syscall"
 
 	"sieg-automation/internal/appconfig"
 	"sieg-automation/internal/certload"
 
-	"github.com/sqweek/dialog"
 	"github.com/webview/webview_go"
 )
 
@@ -23,13 +26,31 @@ import (
 var interfaceHTML string
 
 func init() {
-	// OBRIGATÓRIO no Windows: diálogos nativos (abrir arquivo/pasta) e a
-	// janela do webview são amarrados à thread do SO que os criou. O Go
-	// pode migrar goroutines entre threads livremente por padrão — isso
-	// quebra silenciosamente qualquer chamada Win32 que dependa de "qual
-	// thread criou o quê". LockOSThread trava a goroutine atual numa
-	// thread fixa antes de qualquer coisa gráfica ser criada.
+	// OBRIGATÓRIO no Windows: a janela do webview é amarrada à thread do SO
+	// que a criou. LockOSThread trava a goroutine atual numa thread fixa
+	// antes de qualquer coisa gráfica ser criada.
 	runtime.LockOSThread()
+}
+
+// escolherViaPowerShell abre um diálogo nativo do Windows rodando um
+// script PowerShell EM OUTRO PROCESSO (não outra goroutine, outro
+// processo mesmo). Isso não é só preferência — é o que resolve o bug
+// anterior: o WebView2 usa COM internamente pra se desenhar, e a
+// biblioteca de diálogo que eu usava antes (sqweek/dialog) também
+// inicializa COM, na mesma thread. Quando as duas tentam "reivindicar"
+// o COM de jeitos diferentes, o Windows recusa em silêncio — sem erro,
+// sem crash, só não abre nada. Rodando num processo separado, o COM do
+// diálogo nunca encosta no COM do WebView2: são processos diferentes,
+// cada um com sua própria memória.
+func escolherViaPowerShell(script string) (string, error) {
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", script)
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true}
+	var saida bytes.Buffer
+	cmd.Stdout = &saida
+	if err := cmd.Run(); err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(saida.String()), nil
 }
 
 // Executar abre a janela de configuração e bloqueia até o usuário terminar
@@ -48,34 +69,34 @@ func Executar() bool {
 	// trava/falha silenciosamente. w.Dispatch() agenda a chamada pra rodar
 	// na thread certa; o canal serve só pra esperar o resultado voltar.
 	w.Bind("escolherArquivo", func() string {
-		resultado := make(chan string, 1)
-		w.Dispatch(func() {
-			caminho, err := dialog.File().
-				Filter("Certificado digital", "pfx").
-				Title("Selecione o certificado .pfx").
-				Load()
-			if err != nil {
-				resultado <- ""
-				return
-			}
-			resultado <- caminho
-		})
-		return <-resultado
+		caminho, err := escolherViaPowerShell(`
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.OpenFileDialog
+$f.Title = "Selecione o certificado .pfx"
+$f.Filter = "Certificado digital (*.pfx)|*.pfx|Todos os arquivos (*.*)|*.*"
+if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output $f.FileName
+}
+`)
+		if err != nil {
+			return ""
+		}
+		return caminho
 	})
 
 	w.Bind("escolherPasta", func() string {
-		resultado := make(chan string, 1)
-		w.Dispatch(func() {
-			caminho, err := dialog.Directory().
-				Title("Selecione a pasta de saída (fora de sync de nuvem)").
-				Browse()
-			if err != nil {
-				resultado <- ""
-				return
-			}
-			resultado <- caminho
-		})
-		return <-resultado
+		caminho, err := escolherViaPowerShell(`
+Add-Type -AssemblyName System.Windows.Forms
+$f = New-Object System.Windows.Forms.FolderBrowserDialog
+$f.Description = "Selecione a pasta de saída (fora de sync de nuvem)"
+if ($f.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+    Write-Output $f.SelectedPath
+}
+`)
+		if err != nil {
+			return ""
+		}
+		return caminho
 	})
 
 	w.Bind("salvarConfiguracao", func(cfgJSON string) string {
