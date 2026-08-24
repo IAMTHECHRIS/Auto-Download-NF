@@ -10,6 +10,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"fmt"
+	"runtime"
 
 	"sieg-automation/internal/appconfig"
 	"sieg-automation/internal/certload"
@@ -20,6 +21,16 @@ import (
 
 //go:embed interface.html
 var interfaceHTML string
+
+func init() {
+	// OBRIGATÓRIO no Windows: diálogos nativos (abrir arquivo/pasta) e a
+	// janela do webview são amarrados à thread do SO que os criou. O Go
+	// pode migrar goroutines entre threads livremente por padrão — isso
+	// quebra silenciosamente qualquer chamada Win32 que dependa de "qual
+	// thread criou o quê". LockOSThread trava a goroutine atual numa
+	// thread fixa antes de qualquer coisa gráfica ser criada.
+	runtime.LockOSThread()
+}
 
 // Executar abre a janela de configuração e bloqueia até o usuário terminar
 // (ou fechar a janela). Devolve true se salvou uma configuração válida.
