@@ -128,16 +128,25 @@ $owner.Dispose()
 	})
 
 	w.Bind("escolherPasta", func() string {
-		// As duas tentativas anteriores (FolderBrowserDialog do WinForms, e
-		// depois um OpenFileDialog "enganado" com CheckFileExists=false pra
-		// fingir que escolhe pasta) usam WinForms por baixo — mesma família,
-		// mesmo tipo de falha possível. Essa aqui é um caminho REALMENTE
-		// diferente: Shell.Application é COM puro do Explorer do Windows,
-		// sem WinForms, sem STA, sem Form-dona — é a mesma API que o
-		// Explorer usa internamente há 20+ anos.
+		// Shell.Application é COM puro do Explorer (diferente das tentativas
+		// anteriores em WinForms) — mas SEM um HWND-dono, o diálogo nasce
+		// atrás da janela principal do webview (mesmo sintoma silencioso do
+		// início: "não abre" quando na verdade abriu, só que escondido).
+		// A correção que já funcionou pro certificado foi dar um dono
+		// TopMost pro diálogo; aqui reaplico a mesma ideia, passando o
+		// Handle real da Form-dona pro BrowseForFolder.
 		caminho, err := escolherViaPowerShell(`
+Add-Type -AssemblyName System.Windows.Forms
+$owner = New-Object System.Windows.Forms.Form
+$owner.TopMost = $true
+$owner.ShowInTaskbar = $false
+$owner.StartPosition = 'CenterScreen'
+$owner.Size = New-Object System.Drawing.Size(0,0)
+$owner.Show()
+$owner.Activate()
 $shell = New-Object -ComObject Shell.Application
-$pasta = $shell.BrowseForFolder(0, "Selecione a pasta de saída (fora de sync de nuvem)", 0, 0)
+$pasta = $shell.BrowseForFolder($owner.Handle.ToInt32(), "Selecione a pasta de saída (fora de sync de nuvem)", 0, 0)
+$owner.Dispose()
 if ($pasta -ne $null) {
     Write-Output $pasta.Self.Path
 }
