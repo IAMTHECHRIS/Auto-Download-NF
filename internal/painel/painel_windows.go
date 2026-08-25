@@ -319,14 +319,25 @@ if ($pasta -ne $null) {
 		w.Terminate()
 	})
 
-	w.Bind("desinstalarTarefaAgendada", func() string {
-		debugLog.Printf(">> desinstalarTarefaAgendada chamado")
+	// Desinstalação completa: remove a tarefa agendada e apaga a pasta
+	// _Controle inteira (programa, config.json, catálogo, checkpoints,
+	// logs) — as notas já baixadas (nfe-compras/nfse, fora do _Controle)
+	// NÃO são tocadas. O próprio .exe está DENTRO da pasta que estamos
+	// apagando, então não dá pra apagar ele enquanto ainda está rodando
+	// (Windows trava arquivo em uso) — por isso agendarAutoLimpeza deixa
+	// um processo solto esperando esse aqui fechar pra terminar o serviço.
+	w.Bind("desinstalarPrograma", func() string {
+		debugLog.Printf(">> desinstalarPrograma chamado")
 		if err := wintask.RemoverTarefa(); err != nil {
 			debugLog.Printf("<< erro ao remover tarefa: %v", err)
 			return respostaErro(err.Error())
 		}
-		debugLog.Printf("<< tarefa agendada removida")
-		return respostaOK("Tarefa agendada removida. O programa e as notas continuam onde estavam — só a coleta automática diária foi desligada.")
+		if err := agendarAutoLimpeza(appconfig.PastaControle(cfg.PastaSaida)); err != nil {
+			debugLog.Printf("<< erro ao agendar limpeza: %v", err)
+			return respostaErro(err.Error())
+		}
+		debugLog.Printf("<< desinstalação agendada, fechando em seguida")
+		return respostaOK("Desinstalado. Fechando...")
 	})
 
 	w.Bind("fecharJanela", func() {
@@ -337,6 +348,26 @@ if ($pasta -ne $null) {
 	w.Run()
 
 	return reconfigurar, nil
+}
+
+// agendarAutoLimpeza dispara um processo PowerShell DESANEXADO (roda solto,
+// não é filho que morre junto com a gente) que espera alguns segundos —
+// tempo pro processo atual fechar e soltar o arquivo do .exe — e só então
+// apaga a pasta inteira, incluindo o próprio executável.
+func agendarAutoLimpeza(pastaControle string) error {
+	script := fmt.Sprintf(`
+Start-Sleep -Seconds 3
+Remove-Item -LiteralPath %s -Recurse -Force -ErrorAction SilentlyContinue
+`, aspasPS(pastaControle))
+
+	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script)
+	const createNoWindow = 0x08000000
+	cmd.SysProcAttr = &syscall.SysProcAttr{HideWindow: true, CreationFlags: createNoWindow}
+	return cmd.Start()
+}
+
+func aspasPS(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
 }
 
 // escolherViaPowerShell — mesma implementação do internal/instalador

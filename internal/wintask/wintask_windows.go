@@ -92,15 +92,21 @@ if ($t) { Write-Output $t.Actions[0].Execute }
 }
 
 func removerTarefa() error {
+	// Checa antes via Get-ScheduledTask (mesma função que já uso pra achar
+	// o caminho registrado) em vez de tentar reconhecer a mensagem de erro
+	// do "schtasks /Delete" quando a tarefa não existe — essa mensagem
+	// muda de texto entre versões/idioma do Windows (chegou a aparecer
+	// como "O sistema não pode encontrar o arquivo especificado", bem
+	// diferente do que eu esperava) e o console do Windows pode embaralhar
+	// os acentos na captura, então casar substring é frágil. Perguntar
+	// direto se existe é mais confiável.
+	if _, existe := caminhoRegistrado(); !existe {
+		return nil
+	}
+
 	cmd := exec.Command("schtasks", "/Delete", "/TN", nomeTarefa, "/F")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		// "não existe" não é erro de verdade pra quem só quer garantir que
-		// sumiu — trata como sucesso.
-		if strings.Contains(strings.ToUpper(string(out)), "ERRO: NAO FOI POSSIVEL LOCALIZAR") ||
-			strings.Contains(strings.ToUpper(string(out)), "CANNOT FIND") {
-			return nil
-		}
 		return fmt.Errorf("remover tarefa agendada: %w — saída: %s", err, string(out))
 	}
 	return nil

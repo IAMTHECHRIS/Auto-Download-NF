@@ -71,17 +71,27 @@
   .btn-link { background: transparent; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; padding: 4px 6px; }
   .btn-link:hover { color: var(--text); }
 
-  /* Toggle "Busca automática": ON = botão sólido verde (apertado), OFF =
-     contorno solto, sem preenchimento — pra ficar óbvio de longe qual é o
-     estado, sem precisar olhar uma bolinha pequena. */
+  /* Toggle "Busca automática" — precisa ser óbvio de longe:
+     OFF = "solto"/saliente (sombra pra fora, como um botão em repouso).
+     ON  = "apertado"/pressionado (sombra pra dentro + desce 1px), verde
+     sólido — sem depender de olhar uma bolinha pequena pra saber o estado. */
   .toggle {
-    display: flex; align-items: center; gap: 6px; cursor: pointer;
-    padding: 8px 16px; border-radius: 20px; border: 1.5px solid var(--border);
-    font-size: 12.5px; font-weight: 600; color: var(--muted); background: transparent;
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    display: flex; align-items: center; gap: 8px; cursor: pointer;
+    padding: 11px 22px; border-radius: 10px; border: 2px solid var(--border);
+    font-size: 13.5px; font-weight: 700; color: var(--text); background: #1b2236;
+    box-shadow: 0 2px 0 rgba(255,255,255,0.05), 0 2px 6px rgba(0,0,0,0.35);
+    transition: all 0.12s;
   }
-  .toggle:hover { border-color: var(--muted); }
-  .toggle.ligado { background: var(--ok); border-color: var(--ok); color: #06281a; }
+  .toggle:hover { border-color: var(--accent); }
+  .toggle::before {
+    content: '○'; font-size: 15px; line-height: 1; color: var(--muted);
+  }
+  .toggle.ligado {
+    background: var(--ok); border-color: var(--ok); color: #06281a;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,0.35);
+    transform: translateY(1px);
+  }
+  .toggle.ligado::before { content: '●'; color: #06281a; }
 
   #status-busca { font-size: 12px; color: var(--muted); }
   #status-busca.ok { color: var(--ok); }
@@ -219,6 +229,12 @@
 
   <!-- ABA: Saída (só o que a empresa emitiu) -->
   <section class="aba" id="aba-saida">
+    <!-- espaçador invisível do mesmo tamanho das sub-abas da Entrada, só
+         pra não pular a altura do layout ao trocar de aba (Saída não tem
+         sub-tipo pra escolher, só existe NFSe emitida). -->
+    <div class="sub-abas" style="visibility:hidden;" aria-hidden="true">
+      <button>—</button>
+    </div>
     <div class="barra">
       <select onchange="saidaState.status=this.value; renderizarTabela(saidaState)">
         <option value="">Todos os status</option>
@@ -338,8 +354,7 @@
       <div class="status-form" id="status-config"></div>
 
       <hr style="border-color: var(--border); margin: 22px 0 14px;">
-      <p class="explicacao" style="margin-bottom: 8px;">Pra parar de usar o programa de vez.</p>
-      <button class="btn-link" style="color: var(--erro);" onclick="clicarDesinstalar()">Desinstalar (remove a tarefa agendada)</button>
+      <button class="btn-link" style="color: var(--erro);" onclick="clicarDesinstalar()">Desinstalar Programa</button>
       <div class="status-form" id="status-desinstalar"></div>
     </div>
   </section>
@@ -672,16 +687,33 @@ async function carregarCatalogo() {
   renderizarTabela(saidaState);
 }
 
+// mostrarCarregando/esconderCarregando reaproveitam o mesmo overlay que
+// cobre a tela na abertura do painel — além de avisar "algo tá
+// acontecendo", ele cobre a tela INTEIRA (z-index alto, position fixed),
+// então clicar em outra aba durante uma busca não registra clique
+// nenhum. Antes disso, dava pra clicar "Buscar" na Entrada e, enquanto
+// ainda rodava, ir pra aba Saída e clicar de novo — parecia travamento.
+function mostrarCarregando(msg) {
+  const overlay = document.getElementById('loadingOverlay');
+  overlay.querySelector('span').textContent = msg;
+  overlay.style.display = 'flex';
+}
+function esconderCarregando() {
+  document.getElementById('loadingOverlay').style.display = 'none';
+}
+
 async function clicarBuscarAgora() {
   const btns = [document.getElementById('btnBuscar')];
   const status1 = document.getElementById('status-busca');
   const status2 = document.getElementById('status-busca2');
   btns.forEach(b => b.disabled = true);
   [status1, status2].forEach(s => { s.className = ''; s.textContent = 'Buscando notas novas...'; });
+  mostrarCarregando('Buscando notas novas na SEFAZ... pode levar um tempinho, não feche o programa.');
 
   const resultado = await window.buscarAgora();
   const r = JSON.parse(resultado);
   await carregarCatalogo();
+  esconderCarregando();
 
   const texto = r.ok ? 'Atualizado.' : (r.erros || ['Erro ao buscar.']).join(' | ');
   const classe = r.ok ? 'ok' : 'erro';
@@ -718,9 +750,11 @@ async function clicarBuscarPorChave() {
   btn.disabled = true;
   status.className = 'status-form';
   status.textContent = 'Buscando na SEFAZ...';
+  mostrarCarregando('Buscando essa nota na SEFAZ... não feche o programa.');
 
   const resultado = await window.buscarPorChave(chave);
   const r = JSON.parse(resultado);
+  esconderCarregando();
 
   if (r.ok) {
     status.className = 'status-form ok';
@@ -911,19 +945,20 @@ function clicarReconfigurar() {
 }
 
 async function clicarDesinstalar() {
-  if (!confirm('Isso remove a tarefa agendada do Windows — a coleta diária automática para de acontecer. O programa, a configuração e as notas já baixadas NÃO são apagados. Confirma?')) {
+  if (!confirm('Isso remove a tarefa agendada, apaga o programa, a configuração, o catálogo e os logs. As notas já baixadas (XMLs) NÃO são apagadas — continuam nas pastas nfe-compras e nfse. Não dá pra desfazer. Confirma?')) {
     return;
   }
   const status = document.getElementById('status-desinstalar');
   status.className = 'status-form';
-  status.textContent = 'Removendo tarefa agendada...';
+  status.textContent = 'Desinstalando...';
 
-  const resultado = await window.desinstalarTarefaAgendada();
+  const resultado = await window.desinstalarPrograma();
   const r = JSON.parse(resultado);
 
   if (r.ok) {
     status.className = 'status-form ok';
     status.textContent = r.mensagem;
+    setTimeout(() => window.fecharJanela(), 1500);
   } else {
     status.className = 'status-form erro';
     status.textContent = r.erro;
@@ -931,7 +966,7 @@ async function clicarDesinstalar() {
 }
 
 Promise.all([carregarCatalogo(), iniciarToggleBusca()]).then(() => {
-  document.getElementById('loadingOverlay').style.display = 'none';
+  esconderCarregando();
   if (buscaAutomatica) clicarBuscarAgora();
 });
 </script>
