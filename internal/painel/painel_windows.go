@@ -25,13 +25,13 @@ import (
 	"syscall"
 	"time"
 
-	"sieg-automation/internal/appconfig"
-	"sieg-automation/internal/catalogo"
-	"sieg-automation/internal/certload"
-	"sieg-automation/internal/coletanfe"
-	"sieg-automation/internal/coletansfe"
-	"sieg-automation/internal/verificacao"
-	"sieg-automation/internal/wintask"
+	"io-nf-automation/internal/appconfig"
+	"io-nf-automation/internal/catalogo"
+	"io-nf-automation/internal/certload"
+	"io-nf-automation/internal/coletanfe"
+	"io-nf-automation/internal/coletansfe"
+	"io-nf-automation/internal/verificacao"
+	"io-nf-automation/internal/wintask"
 
 	"github.com/webview/webview_go"
 )

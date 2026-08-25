@@ -9,7 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"sieg-automation/internal/document"
+	"io-nf-automation/internal/document"
 )
 
 // FileName monta o padrão definido por Ismael:

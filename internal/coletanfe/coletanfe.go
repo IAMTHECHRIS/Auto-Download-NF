@@ -14,11 +14,11 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"sieg-automation/internal/appconfig"
-	"sieg-automation/internal/catalogo"
-	"sieg-automation/internal/document"
-	"sieg-automation/internal/nfedist"
-	"sieg-automation/internal/organizer"
+	"io-nf-automation/internal/appconfig"
+	"io-nf-automation/internal/catalogo"
+	"io-nf-automation/internal/document"
+	"io-nf-automation/internal/nfedist"
+	"io-nf-automation/internal/organizer"
 )
 
 // MaxPaginas — cautela deliberada: não varrer tudo numa tacada só.

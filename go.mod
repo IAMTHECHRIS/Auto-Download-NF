@@ -1,4 +1,4 @@
-module sieg-automation
+module io-nf-automation
 
 go 1.23
 

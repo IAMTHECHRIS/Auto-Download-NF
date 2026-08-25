@@ -144,7 +144,7 @@ const (
 )
 
 // ParseNFSeNacional interpreta o XML da NFSe do Sistema Nacional Já
-// descomprimido (ver sieg-automation/internal/adn pro passo de
+// descomprimido (ver io-nf-automation/internal/adn pro passo de
 // base64+gzip). meuCNPJ é usado só pra apontar Direcao — o Document sempre
 // carrega o FORNECEDOR (prestador), independente da direção; quem consome
 // decide o que fazer com uma nota emitida (hoje o padrão de pasta só cobre

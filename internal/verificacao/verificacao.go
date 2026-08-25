@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"sieg-automation/internal/catalogo"
+	"io-nf-automation/internal/catalogo"
 )
 
 // Faltando é uma nota que está no catálogo mas cujo arquivo não foi

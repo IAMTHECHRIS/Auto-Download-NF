@@ -12,13 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"sieg-automation/internal/appconfig"
-	"sieg-automation/internal/coletanfe"
-	"sieg-automation/internal/coletansfe"
-	"sieg-automation/internal/instalador"
-	"sieg-automation/internal/painel"
-	"sieg-automation/internal/relocador"
-	"sieg-automation/internal/wintask"
+	"io-nf-automation/internal/appconfig"
+	"io-nf-automation/internal/coletanfe"
+	"io-nf-automation/internal/coletansfe"
+	"io-nf-automation/internal/instalador"
+	"io-nf-automation/internal/painel"
+	"io-nf-automation/internal/relocador"
+	"io-nf-automation/internal/wintask"
 )
 
 // rodandoViaAgendador é true quando o próprio wintask.EnsureDailyTask

@@ -18,8 +18,8 @@ import (
 	"strconv"
 	"time"
 
-	"sieg-automation/internal/appconfig"
-	"sieg-automation/internal/document"
+	"io-nf-automation/internal/appconfig"
+	"io-nf-automation/internal/document"
 )
 
 // Entrada é uma linha do catálogo já decodificada, pronta pro painel exibir.

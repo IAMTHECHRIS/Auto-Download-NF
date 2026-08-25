@@ -9,12 +9,12 @@ import (
 	"path/filepath"
 	"time"
 
-	"sieg-automation/internal/adn"
-	"sieg-automation/internal/appconfig"
-	"sieg-automation/internal/catalogo"
-	"sieg-automation/internal/document"
-	"sieg-automation/internal/nfedist"
-	"sieg-automation/internal/organizer"
+	"io-nf-automation/internal/adn"
+	"io-nf-automation/internal/appconfig"
+	"io-nf-automation/internal/catalogo"
+	"io-nf-automation/internal/document"
+	"io-nf-automation/internal/nfedist"
+	"io-nf-automation/internal/organizer"
 )
 
 // MaxPaginas — cautela deliberada, mesmo espírito do coletanfe.

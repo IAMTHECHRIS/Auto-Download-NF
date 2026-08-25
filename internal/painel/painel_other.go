@@ -4,7 +4,7 @@
 // (mesmo motivo do internal/instalador).
 package painel
 
-import "sieg-automation/internal/appconfig"
+import "io-nf-automation/internal/appconfig"
 
 func Abrir(cfg appconfig.Config) (bool, error) {
 	return false, nil

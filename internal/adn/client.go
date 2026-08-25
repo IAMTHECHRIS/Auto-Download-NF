@@ -14,7 +14,7 @@ import (
 	"net/http"
 	"time"
 
-	"sieg-automation/internal/certload"
+	"io-nf-automation/internal/certload"
 )
 
 const baseURLProducao = "https://adn.nfse.gov.br/contribuintes"

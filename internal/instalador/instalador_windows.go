@@ -21,8 +21,8 @@ import (
 	"syscall"
 	"time"
 
-	"sieg-automation/internal/appconfig"
-	"sieg-automation/internal/certload"
+	"io-nf-automation/internal/appconfig"
+	"io-nf-automation/internal/certload"
 
 	"github.com/webview/webview_go"
 )

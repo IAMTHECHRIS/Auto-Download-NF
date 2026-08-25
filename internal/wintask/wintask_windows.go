@@ -112,7 +112,7 @@ func removerTarefa() error {
 	return nil
 }
 
-// aspasPS envolve a string em aspas simples pro PowerShell — '' escapa uma
+// aspasPS envolve a string em aspas simples pro PowerShell — ” escapa uma
 // aspa simples literal dentro do valor (ex: caminho de arquivo com apóstrofo).
 func aspasPS(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "''") + "'"

@@ -1,11 +1,8 @@
-// Protótipo do pipeline de captura/organização de documentos fiscais.
-//
-// MODO ATUAL: simulação. Ainda não temos a API key do SIEG nem o certificado
-// A1 renovado, então este main.go lê um XML sintético de testdata/ em vez de
-// chamar a API real. Quando os dois estiverem disponíveis, troca a leitura
-// do arquivo local pela chamada real em internal/sieg.Client.BaixarXmls —
-// o resto do pipeline (parse → renomeio → organização de pasta) já funciona
-// igual, independente da fonte.
+// Teste offline do pipeline de parse/renomeio/organização de documentos
+// fiscais — lê um XML sintético de testdata/ em vez de chamar os
+// webservices reais (nfedist/adn), útil pra testar essa parte sem precisar
+// de certificado nem rede. O pipeline de coleta de verdade fica em
+// cmd/coletor.
 package main
 
 import (
@@ -13,13 +10,12 @@ import (
 	"log"
 	"os"
 
-	"sieg-automation/internal/document"
-	"sieg-automation/internal/organizer"
+	"io-nf-automation/internal/document"
+	"io-nf-automation/internal/organizer"
 )
 
 func main() {
-	fmt.Println("=== Pipeline de captura fiscal — modo SIMULAÇÃO ===")
-	fmt.Println("(sem API key do SIEG nem certificado renovado ainda)")
+	fmt.Println("=== Pipeline de captura fiscal — teste offline (XML sintético) ===")
 	fmt.Println()
 
 	raw, err := os.ReadFile("testdata/nfe_exemplo_sintetico.xml")

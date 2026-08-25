@@ -19,7 +19,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"sieg-automation/internal/appconfig"
+	"io-nf-automation/internal/appconfig"
 )
 
 const nomeExeInstalado = "coletor-notas-fiscais.exe"

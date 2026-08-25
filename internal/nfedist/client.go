@@ -15,8 +15,8 @@ import (
 	"fmt"
 
 	"io"
+	"io-nf-automation/internal/certload"
 	"net/http"
-	"sieg-automation/internal/certload"
 	"time"
 )
 
