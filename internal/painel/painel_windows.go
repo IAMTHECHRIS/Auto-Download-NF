@@ -10,6 +10,7 @@
 package painel
 
 import (
+	"archive/zip"
 	"bytes"
 	_ "embed"
 	"encoding/json"
@@ -163,6 +164,35 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 		}
 		b, _ := json.Marshal(map[string]any{"ok": true, "faltando": faltando})
 		return string(b)
+	})
+
+	// gerarZip empacota os XMLs selecionados na aba "Verificar cópia" pra o
+	// usuário levar pra onde precisar. Salva DENTRO da própria pasta de
+	// destino que ele já escolheu pra verificar — contextualmente é o
+	// lugar óbvio: é exatamente pra lá que essas notas iam de qualquer
+	// jeito, o ZIP só facilita levar tudo de uma vez.
+	w.Bind("gerarZip", func(caminhosJSON string, pastaDestino string) string {
+		var caminhos []string
+		if err := json.Unmarshal([]byte(caminhosJSON), &caminhos); err != nil {
+			return respostaErro("dados inválidos: " + err.Error())
+		}
+		if len(caminhos) == 0 {
+			return respostaErro("selecione ao menos uma nota.")
+		}
+		if strings.TrimSpace(pastaDestino) == "" {
+			return respostaErro("escolha a pasta de destino antes.")
+		}
+
+		nomeZip := fmt.Sprintf("notas-selecionadas-%s.zip", time.Now().Format("20060102-1504"))
+		caminhoZip := filepath.Join(pastaDestino, nomeZip)
+		debugLog.Printf(">> gerarZip destino=%s itens=%d", caminhoZip, len(caminhos))
+
+		if err := criarZip(caminhoZip, caminhos); err != nil {
+			debugLog.Printf("<< gerarZip erro: %v", err)
+			return respostaErro(err.Error())
+		}
+		debugLog.Printf("<< gerarZip ok")
+		return respostaOK(fmt.Sprintf("ZIP com %d nota(s) criado em: %s", len(caminhos), caminhoZip))
 	})
 
 	w.Bind("obterBuscaAutomatica", func() bool {
@@ -326,6 +356,42 @@ func escolherViaPowerShell(script string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(saida.String()), nil
+}
+
+// criarZip empacota cada arquivo em "arquivos" no zip criado em "destino",
+// usando só o nome-base de cada um (sem estrutura de pasta ANO/MES/TIPO
+// dentro do zip — quem recebe só quer os XMLs soltos, prontos pra usar).
+func criarZip(destino string, arquivos []string) error {
+	f, err := os.Create(destino)
+	if err != nil {
+		return fmt.Errorf("criar arquivo zip: %w", err)
+	}
+	defer f.Close()
+
+	zw := zip.NewWriter(f)
+	defer zw.Close()
+
+	for _, caminho := range arquivos {
+		if err := adicionarAoZip(zw, caminho); err != nil {
+			return fmt.Errorf("adicionar %s ao zip: %w", filepath.Base(caminho), err)
+		}
+	}
+	return nil
+}
+
+func adicionarAoZip(zw *zip.Writer, caminho string) error {
+	src, err := os.Open(caminho)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	w, err := zw.Create(filepath.Base(caminho))
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(w, src)
+	return err
 }
 
 func respostaOK(msg string) string {

@@ -196,7 +196,10 @@
     </div>
 
     <label>Senha do certificado</label>
-    <input type="password" id="senha" placeholder="••••••••">
+    <div class="row">
+      <input type="password" id="senha" placeholder="••••••••">
+      <button type="button" class="btn-secundario" onclick="alternarSenhaVisivel()" id="btnOlhoSenha">Mostrar</button>
+    </div>
 
     <label>Pasta onde as notas serão salvas</label>
     <div class="row">
@@ -267,6 +270,14 @@ async function escolherPastaClick() {
   // nada aparecia no log.
   const caminho = await window.escolherPasta();
   if (caminho) document.getElementById('pasta').value = caminho;
+}
+
+function alternarSenhaVisivel() {
+  const campo = document.getElementById('senha');
+  const btn = document.getElementById('btnOlhoSenha');
+  const visivel = campo.type === 'text';
+  campo.type = visivel ? 'password' : 'text';
+  btn.textContent = visivel ? 'Mostrar' : 'Ocultar';
 }
 
 function nomeBase(caminho) {

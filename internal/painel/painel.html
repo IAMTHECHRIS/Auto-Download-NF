@@ -40,6 +40,15 @@
   nav.abas button:hover { color: var(--text); }
   nav.abas button.ativa { color: var(--text); border-bottom-color: var(--accent); font-weight: 600; }
 
+  .sub-abas { display: flex; gap: 4px; padding: 10px 24px 0; }
+  .sub-abas button {
+    background: transparent; border: 1px solid var(--border); border-bottom: none;
+    color: var(--muted); font-size: 12px; padding: 7px 14px; cursor: pointer;
+    border-radius: 8px 8px 0 0;
+  }
+  .sub-abas button:hover { color: var(--text); }
+  .sub-abas button.sub-ativa { color: var(--text); background: var(--card); font-weight: 600; }
+
   section.aba { display: none; flex: 1; min-height: 0; flex-direction: column; }
   section.aba.ativa { display: flex; }
 
@@ -62,13 +71,17 @@
   .btn-link { background: transparent; border: none; color: var(--muted); font-size: 12px; text-decoration: underline; padding: 4px 6px; }
   .btn-link:hover { color: var(--text); }
 
+  /* Toggle "Busca automática": ON = botão sólido verde (apertado), OFF =
+     contorno solto, sem preenchimento — pra ficar óbvio de longe qual é o
+     estado, sem precisar olhar uma bolinha pequena. */
   .toggle {
-    display: flex; align-items: center; gap: 7px; cursor: pointer;
-    padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 12.5px;
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+    padding: 8px 16px; border-radius: 20px; border: 1.5px solid var(--border);
+    font-size: 12.5px; font-weight: 600; color: var(--muted); background: transparent;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
   }
-  .toggle .bolinha { width: 9px; height: 9px; border-radius: 50%; background: var(--erro); }
-  .toggle.ligado .bolinha { background: var(--ok); }
-  .toggle .rotulo { color: var(--muted); }
+  .toggle:hover { border-color: var(--muted); }
+  .toggle.ligado { background: var(--ok); border-color: var(--ok); color: #06281a; }
 
   #status-busca { font-size: 12px; color: var(--muted); }
   #status-busca.ok { color: var(--ok); }
@@ -79,27 +92,41 @@
   thead th {
     position: sticky; top: 0; background: var(--bg); text-align: left; padding: 10px 8px;
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted);
-    border-bottom: 1px solid var(--border); cursor: pointer; white-space: nowrap;
+    border-bottom: 1px solid var(--border); white-space: nowrap;
   }
-  thead th:hover { color: var(--text); }
+  thead th .rotulo-col { cursor: pointer; }
+  thead th:hover .rotulo-col { color: var(--text); }
   thead th .seta { opacity: 0.5; font-size: 10px; }
-  thead th .filtro-icon { opacity: 0.5; font-size: 10px; margin-left: 4px; cursor: pointer; }
-  thead th .filtro-icon:hover { opacity: 1; }
+  thead th .filtro-icon {
+    opacity: 0.6; font-size: 13px; margin-left: 5px; cursor: pointer;
+    padding: 2px 4px; border-radius: 4px;
+  }
+  thead th .filtro-icon:hover { opacity: 1; background: rgba(255,255,255,0.08); }
   thead th .filtro-icon.ativo { opacity: 1; color: var(--accent); }
 
   #filtroPopup {
     position: fixed; display: none; z-index: 1000;
     background: var(--card); border: 1px solid var(--border); border-radius: 8px;
-    padding: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); min-width: 190px;
+    padding: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    min-width: 220px; max-width: 280px;
   }
   #filtroPopup label {
     display: block; font-size: 11px; color: var(--muted);
     text-transform: uppercase; letter-spacing: 0.03em; margin: 8px 0 4px;
   }
   #filtroPopup label:first-child { margin-top: 0; }
-  #filtroPopup input { width: 100%; font-size: 13px; }
+  #filtroPopup input[type=text], #filtroPopup input[type=date] { width: 100%; font-size: 13px; }
+  .filtro-rapidas { font-size: 11px; margin: 8px 0 2px; }
+  .filtro-rapidas a { color: var(--accent); text-decoration: none; cursor: pointer; }
+  .filtro-lista {
+    max-height: 190px; overflow-y: auto; border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px; margin-top: 4px;
+  }
+  .filtro-item { display: flex; align-items: center; gap: 6px; font-size: 12.5px; padding: 3px 2px; cursor: pointer; }
+  .filtro-item input { width: auto; margin: 0; }
   .filtro-botoes { display: flex; gap: 8px; margin-top: 12px; }
   .filtro-botoes button { flex: 1; padding: 7px 10px; font-size: 12px; }
+
   tbody td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
   tbody tr:hover { background: rgba(255,255,255,0.02); }
   .tag { display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; background: #232b45; color: var(--muted); }
@@ -110,6 +137,7 @@
   footer span { font-size: 12px; color: var(--muted); }
 
   .painel-conteudo { padding: 20px 24px; max-width: 620px; }
+  .painel-conteudo.largo { max-width: 100%; }
   .painel-conteudo p.explicacao { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; line-height: 1.5; }
   .campo { margin-bottom: 16px; }
   .campo label {
@@ -122,8 +150,12 @@
   .status-form { margin-top: 12px; font-size: 12.5px; min-height: 16px; }
   .status-form.ok { color: var(--ok); }
   .status-form.erro { color: var(--erro); }
-  .resultado-item { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
-  .resultado-item .valor2 { text-align: right; }
+  .resultado-item {
+    display: flex; justify-content: space-between; align-items: center; gap: 12px;
+    padding: 8px 4px; border-bottom: 1px solid var(--border); font-size: 13px;
+  }
+  .resultado-item .esquerda { display: flex; align-items: center; gap: 10px; }
+  .resultado-item .valor2 { text-align: right; white-space: nowrap; }
 
   #loadingOverlay {
     position: fixed; inset: 0; background: var(--bg);
@@ -150,6 +182,9 @@
         <h1>Coletor de Notas Fiscais</h1>
         <div class="subtitle">Painel</div>
       </div>
+      <div class="toggle" id="toggleBusca" onclick="clicarToggleBusca()">
+        <span class="rotulo">Busca automática ao abrir</span>
+      </div>
     </div>
     <nav class="abas">
       <button class="ativa" data-aba="entrada" onclick="mudarAba('entrada')">Entrada</button>
@@ -160,22 +195,18 @@
     </nav>
   </header>
 
-  <!-- ABA: Entrada (compras + serviços recebidos) -->
+  <!-- ABA: Entrada (compras + serviços recebidos) — sub-abas NFEC/NFES -->
   <section class="aba ativa" id="aba-entrada">
+    <div class="sub-abas">
+      <button class="sub-ativa" data-subtipo="NFEC" onclick="mudarSubTipo('NFEC')">NFEC (compra)</button>
+      <button data-subtipo="NFES" onclick="mudarSubTipo('NFES')">NFES (serviço)</button>
+    </div>
     <div class="barra">
-      <select onchange="entradaState.tipo=this.value; renderizarTabela(entradaState)">
-        <option value="">Todos os tipos</option>
-        <option value="NFEC">NFEC (compra)</option>
-        <option value="NFES">NFES (serviço)</option>
-      </select>
       <select onchange="entradaState.status=this.value; renderizarTabela(entradaState)">
         <option value="">Todos os status</option>
         <option value="normal">Normal</option>
         <option value="CANCELADO">Cancelado</option>
       </select>
-      <div class="toggle" id="toggleBusca" onclick="clicarToggleBusca()">
-        <span class="bolinha"></span><span class="rotulo">Busca automática ao abrir</span>
-      </div>
       <span id="status-busca"></span>
       <button class="btn-principal" id="btnBuscar" onclick="clicarBuscarAgora()">Buscar notas agora</button>
     </div>
@@ -194,9 +225,6 @@
         <option value="normal">Normal</option>
         <option value="CANCELADO">Cancelado</option>
       </select>
-      <div class="toggle" id="toggleBusca2" onclick="clicarToggleBusca()">
-        <span class="bolinha"></span><span class="rotulo">Busca automática ao abrir</span>
-      </div>
       <span id="status-busca2"></span>
       <button class="btn-principal" onclick="clicarBuscarAgora()">Buscar notas agora</button>
     </div>
@@ -225,7 +253,7 @@
 
   <!-- ABA: Verificar cópia -->
   <section class="aba" id="aba-verificar">
-    <div class="painel-conteudo" style="max-width: 100%;">
+    <div class="painel-conteudo largo">
       <p class="explicacao">
         Escolha uma pasta (ex: a do Google Drive) e compara com o que já foi
         baixado — mostra o que ainda não está lá dentro.
@@ -239,7 +267,15 @@
       </div>
       <button class="btn-principal" id="btnVerificar" onclick="clicarVerificarCopia()" disabled>Verificar agora</button>
       <div class="status-form" id="status-verificar"></div>
-      <div id="resultado-verificar" style="margin-top: 16px;"></div>
+
+      <div class="barra" id="verificarFiltros" style="display:none; padding: 14px 0 10px; border-bottom: none;">
+        <input type="text" id="verificarBusca" placeholder="Buscar por fornecedor ou número..." oninput="renderizarFaltando()">
+        <select id="verificarMes" onchange="renderizarFaltando()"><option value="">Todos os meses</option></select>
+        <button class="btn-secundario" onclick="marcarTodosFaltando(true)">Marcar todas</button>
+        <button class="btn-secundario" onclick="marcarTodosFaltando(false)">Desmarcar</button>
+        <button class="btn-principal" onclick="clicarGerarZip()">Gerar ZIP com selecionadas</button>
+      </div>
+      <div id="resultado-verificar"></div>
     </div>
   </section>
 
@@ -283,7 +319,10 @@
 
       <div class="campo">
         <label>Senha do certificado (deixe em branco pra manter a atual)</label>
-        <input type="password" id="cfgSenha" placeholder="••••••••">
+        <div class="row">
+          <input type="password" id="cfgSenha" placeholder="••••••••">
+          <button type="button" class="btn-secundario" onclick="clicarAlternarSenha()" id="btnOlhoCfgSenha">Mostrar</button>
+        </div>
       </div>
 
       <div class="campo">
@@ -312,22 +351,23 @@
 // registrados no Go (window.buscarAgora, window.verificarCopia, etc). Uma
 // function declaration global com o MESMO nome de um bind sobrescreve a
 // ponte pro Go e passa a chamar a si mesma pra sempre, sem nunca sair do
-// JavaScript. Já aconteceu duas vezes nessa mesma tela — não repetir.
+// JavaScript. Já aconteceu várias vezes nessa mesma tela — não repetir.
 
 let todasEntradas = [];
 let pastaVerificarEscolhida = '';
 let buscaAutomatica = false;
 
 function filtrosVazios() {
-  return { fornecedor: '', numero: '', dataDe: '', dataAte: '', valorMin: '', valorMax: '' };
+  // fornecedor/numero/valor: null = sem filtro (mostra tudo), ou um Set
+  // com os valores marcados no checklist estilo Excel. data: faixa de/até.
+  return { fornecedor: null, numero: null, valor: null, dataDe: '', dataAte: '' };
 }
-const entradaState = { filtros: filtrosVazios(), tipo: '', status: '', ordenarPor: 'data', ordemAsc: false };
-const saidaState   = { filtros: filtrosVazios(), tipo: '', status: '', ordenarPor: 'data', ordemAsc: false };
+const entradaState = { filtros: filtrosVazios(), tipo: 'NFEC', status: '', ordenarPor: 'data', ordemAsc: false };
+const saidaState   = { filtros: filtrosVazios(), tipo: '',     status: '', ordenarPor: 'data', ordemAsc: false };
 
 // filtravel: coluna ganha o ícone "▾" no cabeçalho (estilo Excel) — clicar
-// nele abre um popup pra filtrar só aquela coluna, digitando (fornecedor/
-// número) ou por faixa (data/valor). Clicar no NOME da coluna (não no
-// ícone) continua ordenando, como já era.
+// nele abre um popup pra filtrar só aquela coluna. Clicar no NOME da
+// coluna (não no ícone) continua ordenando.
 const COLUNAS = [
   { chave: 'data', rotulo: 'Data', filtravel: true },
   { chave: 'tipo', rotulo: 'Tipo', filtravel: false },
@@ -338,10 +378,22 @@ const COLUNAS = [
   { chave: '', rotulo: '', filtravel: false },
 ];
 
+// Entrada não mostra a coluna Tipo — já está implícito na sub-aba
+// (NFEC/NFES) selecionada, mostrar de novo seria redundante.
+function colunasPara(estado) {
+  return estado === entradaState ? COLUNAS.filter(c => c.chave !== 'tipo') : COLUNAS;
+}
+
 function mudarAba(nome) {
   document.querySelectorAll('nav.abas button').forEach(b => b.classList.toggle('ativa', b.dataset.aba === nome));
   document.querySelectorAll('section.aba').forEach(s => s.classList.toggle('ativa', s.id === 'aba-' + nome));
   if (nome === 'config') atualizarFormConfiguracao();
+}
+
+function mudarSubTipo(tipo) {
+  entradaState.tipo = tipo;
+  document.querySelectorAll('.sub-abas button').forEach(b => b.classList.toggle('sub-ativa', b.dataset.subtipo === tipo));
+  renderizarTabela(entradaState);
 }
 
 function formatarValor(v) {
@@ -357,28 +409,39 @@ function abrir(caminho) {
   if (caminho) window.abrirPasta(caminho);
 }
 
+const CELULAS = {
+  data: e => formatarData(e.data),
+  tipo: e => `<span class="tag">${e.tipo || ''}</span>`,
+  fornecedor: e => e.fornecedor || '',
+  numero: e => e.numero || '',
+  valor: e => formatarValor(e.valor || 0),
+  status: e => {
+    const cancelado = (e.status || '').toUpperCase().includes('CANCELADO');
+    return e.status ? `<span class="tag ${cancelado ? 'cancelado' : ''}">${e.status}</span>` : '';
+  },
+};
+
 function renderizarTabela(estado) {
   const ehSaida = estado === saidaState;
   const sufixo = ehSaida ? 'saida' : 'entrada';
+  const colunas = colunasPara(estado);
+
   const base = ehSaida
     ? todasEntradas.filter(e => e.tipo === 'NFES-EMITIDA')
-    : todasEntradas.filter(e => e.tipo !== 'NFES-EMITIDA');
+    : todasEntradas.filter(e => e.tipo !== 'NFES-EMITIDA' && (!estado.tipo || e.tipo === estado.tipo));
 
   const f = estado.filtros;
   let filtradas = base.filter(e => {
-    if (estado.tipo && e.tipo !== estado.tipo) return false;
     if (estado.status === 'CANCELADO' && !(e.status || '').toUpperCase().includes('CANCELADO')) return false;
     if (estado.status === 'normal' && (e.status || '').toUpperCase().includes('CANCELADO')) return false;
 
-    if (f.fornecedor && !(e.fornecedor || '').toLowerCase().includes(f.fornecedor.toLowerCase())) return false;
-    if (f.numero && !(e.numero || '').toLowerCase().includes(f.numero.toLowerCase())) return false;
+    if (f.fornecedor && !f.fornecedor.has(e.fornecedor || '(vazio)')) return false;
+    if (f.numero && !f.numero.has(e.numero || '(vazio)')) return false;
+    if (f.valor && !f.valor.has(formatarValor(e.valor || 0))) return false;
 
     const dataISO = (e.data || '').substring(0, 10);
     if (f.dataDe && dataISO < f.dataDe) return false;
     if (f.dataAte && dataISO > f.dataAte) return false;
-
-    if (f.valorMin && e.valor < parseFloat(f.valorMin.replace(',', '.'))) return false;
-    if (f.valorMax && e.valor > parseFloat(f.valorMax.replace(',', '.'))) return false;
 
     return true;
   });
@@ -406,12 +469,13 @@ function renderizarTabela(estado) {
 
     const thead = document.createElement('thead');
     const trh = document.createElement('tr');
-    for (const col of COLUNAS) {
+    for (const col of colunas) {
       const th = document.createElement('th');
       if (col.chave) {
         const seta = estado.ordenarPor === col.chave ? (estado.ordemAsc ? '▲' : '▼') : '';
 
         const rotulo = document.createElement('span');
+        rotulo.className = 'rotulo-col';
         rotulo.textContent = col.rotulo;
         rotulo.onclick = () => {
           if (estado.ordenarPor === col.chave) estado.ordemAsc = !estado.ordemAsc;
@@ -442,17 +506,13 @@ function renderizarTabela(estado) {
 
     const tbody = document.createElement('tbody');
     for (const e of filtradas) {
-      const cancelado = (e.status || '').toUpperCase().includes('CANCELADO');
       const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${formatarData(e.data)}</td>
-        <td><span class="tag">${e.tipo || ''}</span></td>
-        <td>${e.fornecedor || ''}</td>
-        <td>${e.numero || ''}</td>
-        <td class="valor">${formatarValor(e.valor || 0)}</td>
-        <td>${e.status ? `<span class="tag ${cancelado ? 'cancelado' : ''}">${e.status}</span>` : ''}</td>
-        <td></td>
-      `;
+      for (const col of colunas) {
+        const td = document.createElement('td');
+        if (col.chave === 'valor') td.className = 'valor';
+        if (col.chave) td.innerHTML = CELULAS[col.chave](e);
+        tr.appendChild(td);
+      }
       const btn = document.createElement('button');
       btn.className = 'btn-secundario';
       btn.textContent = 'Abrir pasta';
@@ -471,76 +531,123 @@ function renderizarTabela(estado) {
     (filtradas.length !== base.length ? ' (de ' + base.length + ')' : '');
 }
 
-// --- Filtro por coluna (estilo Excel: ícone ▾ no cabeçalho abre um popup) ---
+// --- Filtro por coluna (estilo Excel) ---
+// Data: faixa de/até. Fornecedor/Número/Valor: checklist com busca — lista
+// os valores que aparecem na coluna, com caixinha de busca pra achar
+// rápido (igual o autofiltro do Excel), marca/desmarca quais entram.
 
 function colunaTemFiltroAtivo(coluna, estado) {
   const f = estado.filtros;
-  if (coluna === 'fornecedor') return !!f.fornecedor;
-  if (coluna === 'numero') return !!f.numero;
   if (coluna === 'data') return !!(f.dataDe || f.dataAte);
-  if (coluna === 'valor') return !!(f.valorMin || f.valorMax);
-  return false;
+  return !!(f[coluna] && f[coluna].size > 0);
 }
 
-let filtroAberto = null; // { coluna, estado }
+function valoresUnicos(base, coluna) {
+  const set = new Set();
+  for (const e of base) {
+    set.add(coluna === 'valor' ? formatarValor(e.valor || 0) : (e[coluna] || '(vazio)'));
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+}
+
+let filtroAberto = null; // { coluna, estado, valoresDisponiveis?, marcados? }
 
 function abrirFiltro(coluna, ancora, estado) {
   const popup = document.getElementById('filtroPopup');
   const rect = ancora.getBoundingClientRect();
-  popup.style.left = Math.min(rect.left, window.innerWidth - 220) + 'px';
+  popup.style.left = Math.min(rect.left, window.innerWidth - 290) + 'px';
   popup.style.top = (rect.bottom + 6) + 'px';
-
-  const f = estado.filtros;
-  let html = '';
-  if (coluna === 'fornecedor' || coluna === 'numero') {
-    const valorAtual = coluna === 'fornecedor' ? f.fornecedor : f.numero;
-    html = `<label>Contém</label><input type="text" id="filtroCampo1" value="${valorAtual || ''}" placeholder="Digite pra filtrar...">`;
-  } else if (coluna === 'data') {
-    html = `<label>De</label><input type="date" id="filtroCampo1" value="${f.dataDe || ''}">
-            <label>Até</label><input type="date" id="filtroCampo2" value="${f.dataAte || ''}">`;
-  } else if (coluna === 'valor') {
-    html = `<label>Mínimo</label><input type="text" id="filtroCampo1" inputmode="decimal" value="${f.valorMin || ''}" placeholder="0,00">
-            <label>Máximo</label><input type="text" id="filtroCampo2" inputmode="decimal" value="${f.valorMax || ''}" placeholder="0,00">`;
-  }
-  html += `<div class="filtro-botoes">
-    <button class="btn-secundario" onclick="limparFiltroAtual()">Limpar</button>
-    <button class="btn-principal" onclick="fecharFiltroPopup()">OK</button>
-  </div>`;
-
-  popup.innerHTML = html;
-  popup.style.display = 'block';
   filtroAberto = { coluna, estado };
 
-  popup.querySelectorAll('input').forEach(inp => {
-    inp.addEventListener('input', () => aplicarFiltroAtual());
-    inp.focus();
-  });
+  if (coluna === 'data') {
+    const f = estado.filtros;
+    popup.innerHTML = `
+      <label>De</label><input type="date" id="filtroDe" value="${f.dataDe || ''}">
+      <label>Até</label><input type="date" id="filtroAte" value="${f.dataAte || ''}">
+      <div class="filtro-botoes">
+        <button class="btn-secundario" onclick="limparFiltroAtual()">Limpar</button>
+        <button class="btn-principal" onclick="fecharFiltroPopup()">OK</button>
+      </div>`;
+    document.getElementById('filtroDe').addEventListener('input', (e) => {
+      estado.filtros.dataDe = e.target.value;
+      renderizarTabela(estado);
+    });
+    document.getElementById('filtroAte').addEventListener('input', (e) => {
+      estado.filtros.dataAte = e.target.value;
+      renderizarTabela(estado);
+    });
+    popup.style.display = 'block';
+    return;
+  }
+
+  const base = (estado === saidaState)
+    ? todasEntradas.filter(e => e.tipo === 'NFES-EMITIDA')
+    : todasEntradas.filter(e => e.tipo !== 'NFES-EMITIDA' && (!estado.tipo || e.tipo === estado.tipo));
+  const valores = valoresUnicos(base, coluna);
+  const selecionados = estado.filtros[coluna];
+
+  popup.innerHTML = `
+    <input type="text" id="filtroBusca" placeholder="Buscar...">
+    <div class="filtro-rapidas">
+      <a onclick="marcarTodosFiltro(true)">Marcar todos</a> ·
+      <a onclick="marcarTodosFiltro(false)">Limpar seleção</a>
+    </div>
+    <div class="filtro-lista" id="filtroLista"></div>
+    <div class="filtro-botoes">
+      <button class="btn-secundario" onclick="limparFiltroAtual()">Limpar</button>
+      <button class="btn-principal" onclick="aplicarChecklistEFechar()">OK</button>
+    </div>`;
+
+  filtroAberto.valoresDisponiveis = valores;
+  filtroAberto.marcados = new Set(selecionados ? Array.from(selecionados) : valores);
+
+  renderizarListaFiltro('');
+  document.getElementById('filtroBusca').addEventListener('input', (e) => renderizarListaFiltro(e.target.value));
+  popup.style.display = 'block';
 }
 
-function aplicarFiltroAtual() {
+function renderizarListaFiltro(busca) {
   if (!filtroAberto) return;
-  const { coluna, estado } = filtroAberto;
-  const c1 = document.getElementById('filtroCampo1');
-  const c2 = document.getElementById('filtroCampo2');
+  const lista = document.getElementById('filtroLista');
+  const termo = busca.toLowerCase();
+  lista.innerHTML = '';
+  for (const v of filtroAberto.valoresDisponiveis) {
+    if (termo && !v.toLowerCase().includes(termo)) continue;
+    const label = document.createElement('label');
+    label.className = 'filtro-item';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = filtroAberto.marcados.has(v);
+    chk.onchange = () => {
+      if (chk.checked) filtroAberto.marcados.add(v);
+      else filtroAberto.marcados.delete(v);
+    };
+    label.appendChild(chk);
+    label.appendChild(document.createTextNode(v));
+    lista.appendChild(label);
+  }
+}
 
-  if (coluna === 'fornecedor') estado.filtros.fornecedor = c1.value;
-  if (coluna === 'numero') estado.filtros.numero = c1.value;
-  if (coluna === 'data') { estado.filtros.dataDe = c1.value; estado.filtros.dataAte = c2.value; }
-  if (coluna === 'valor') { estado.filtros.valorMin = c1.value; estado.filtros.valorMax = c2.value; }
+function marcarTodosFiltro(marcar) {
+  if (!filtroAberto) return;
+  filtroAberto.marcados = marcar ? new Set(filtroAberto.valoresDisponiveis) : new Set();
+  renderizarListaFiltro(document.getElementById('filtroBusca').value);
+}
 
+function aplicarChecklistEFechar() {
+  if (!filtroAberto) return;
+  const { coluna, estado, marcados, valoresDisponiveis } = filtroAberto;
+  // marcou tudo = equivalente a "sem filtro" (não deixa o ícone aceso à toa)
+  estado.filtros[coluna] = (marcados.size === valoresDisponiveis.length) ? null : marcados;
   renderizarTabela(estado);
-  // renderizarTabela reabre um popup novo (cabeçalho é reconstruído) —
-  // como o usuário ainda está digitando, mantém o mesmo aberto em vez de
-  // fechar, só perde o "aceso" visual do ícone até o próximo render.
+  fecharFiltroPopup();
 }
 
 function limparFiltroAtual() {
   if (!filtroAberto) return;
   const { coluna, estado } = filtroAberto;
-  if (coluna === 'fornecedor') estado.filtros.fornecedor = '';
-  if (coluna === 'numero') estado.filtros.numero = '';
   if (coluna === 'data') { estado.filtros.dataDe = ''; estado.filtros.dataAte = ''; }
-  if (coluna === 'valor') { estado.filtros.valorMin = ''; estado.filtros.valorMax = ''; }
+  else estado.filtros[coluna] = null;
   renderizarTabela(estado);
   fecharFiltroPopup();
 }
@@ -582,13 +689,13 @@ async function clicarBuscarAgora() {
   btns.forEach(b => b.disabled = false);
 }
 
-// --- Toggle de busca automática ---
+// --- Toggle de busca automática (agora só existe 1, no topo) ---
 async function iniciarToggleBusca() {
   buscaAutomatica = await window.obterBuscaAutomatica();
   renderizarToggle();
 }
 function renderizarToggle() {
-  document.querySelectorAll('.toggle').forEach(t => t.classList.toggle('ligado', buscaAutomatica));
+  document.getElementById('toggleBusca').classList.toggle('ligado', buscaAutomatica);
 }
 async function clicarToggleBusca() {
   buscaAutomatica = !buscaAutomatica;
@@ -628,6 +735,9 @@ async function clicarBuscarPorChave() {
 }
 
 // --- Verificar cópia ---
+let ultimoFaltando = [];
+let faltandoSelecionadas = new Set();
+
 async function clicarEscolherPastaVerificar() {
   const caminho = await window.escolherPasta();
   if (!caminho) return;
@@ -638,10 +748,10 @@ async function clicarEscolherPastaVerificar() {
 
 async function clicarVerificarCopia() {
   const status = document.getElementById('status-verificar');
-  const div = document.getElementById('resultado-verificar');
+  document.getElementById('resultado-verificar').innerHTML = '';
+  document.getElementById('verificarFiltros').style.display = 'none';
   status.className = 'status-form';
   status.textContent = 'Verificando...';
-  div.innerHTML = '';
 
   const resultado = await window.verificarCopia(pastaVerificarEscolhida);
   const r = JSON.parse(resultado);
@@ -652,20 +762,92 @@ async function clicarVerificarCopia() {
     return;
   }
 
-  const faltando = r.faltando || [];
-  if (faltando.length === 0) {
+  ultimoFaltando = r.faltando || [];
+  faltandoSelecionadas = new Set();
+
+  if (ultimoFaltando.length === 0) {
     status.className = 'status-form ok';
     status.textContent = 'Tudo copiado — nada pendente.';
     return;
   }
 
   status.className = 'status-form';
-  status.textContent = faltando.length + ' nota(s) ainda não encontrada(s):';
-  for (const f of faltando) {
+  status.textContent = ultimoFaltando.length + ' nota(s) ainda não encontrada(s):';
+
+  const meses = Array.from(new Set(ultimoFaltando.map(f => (f.data || '').substring(0, 7)))).sort().reverse();
+  const selMes = document.getElementById('verificarMes');
+  selMes.innerHTML = '<option value="">Todos os meses</option>' + meses.map(m => `<option value="${m}">${m}</option>`).join('');
+  document.getElementById('verificarBusca').value = '';
+  document.getElementById('verificarFiltros').style.display = 'flex';
+
+  renderizarFaltando();
+}
+
+function faltandoFiltradas() {
+  const busca = document.getElementById('verificarBusca').value.toLowerCase();
+  const mes = document.getElementById('verificarMes').value;
+  return ultimoFaltando.filter(f => {
+    if (mes && (f.data || '').substring(0, 7) !== mes) return false;
+    if (busca && !(f.fornecedor || '').toLowerCase().includes(busca) && !(f.numero || '').toLowerCase().includes(busca)) return false;
+    return true;
+  });
+}
+
+function renderizarFaltando() {
+  const div = document.getElementById('resultado-verificar');
+  div.innerHTML = '';
+  for (const f of faltandoFiltradas()) {
     const item = document.createElement('div');
     item.className = 'resultado-item';
-    item.innerHTML = `<span>${formatarData(f.data)} — ${f.tipo} — ${f.fornecedor} nº ${f.numero}</span><span class="valor2">${formatarValor(f.valor)}</span>`;
+
+    const esquerda = document.createElement('span');
+    esquerda.className = 'esquerda';
+    const chk = document.createElement('input');
+    chk.type = 'checkbox';
+    chk.checked = faltandoSelecionadas.has(f.caminho);
+    chk.onchange = () => {
+      if (chk.checked) faltandoSelecionadas.add(f.caminho);
+      else faltandoSelecionadas.delete(f.caminho);
+    };
+    esquerda.appendChild(chk);
+    esquerda.appendChild(document.createTextNode(`${formatarData(f.data)} — ${f.tipo} — ${f.fornecedor} nº ${f.numero}`));
+
+    const valorSpan = document.createElement('span');
+    valorSpan.className = 'valor2';
+    valorSpan.textContent = formatarValor(f.valor);
+
+    item.appendChild(esquerda);
+    item.appendChild(valorSpan);
     div.appendChild(item);
+  }
+}
+
+function marcarTodosFaltando(marcar) {
+  for (const f of faltandoFiltradas()) {
+    if (marcar) faltandoSelecionadas.add(f.caminho);
+    else faltandoSelecionadas.delete(f.caminho);
+  }
+  renderizarFaltando();
+}
+
+async function clicarGerarZip() {
+  if (faltandoSelecionadas.size === 0) {
+    alert('Selecione ao menos uma nota primeiro.');
+    return;
+  }
+  const status = document.getElementById('status-verificar');
+  status.className = 'status-form';
+  status.textContent = 'Gerando ZIP...';
+
+  const resultado = await window.gerarZip(JSON.stringify(Array.from(faltandoSelecionadas)), pastaVerificarEscolhida);
+  const r = JSON.parse(resultado);
+
+  if (r.ok) {
+    status.className = 'status-form ok';
+    status.textContent = r.mensagem;
+  } else {
+    status.className = 'status-form erro';
+    status.textContent = r.erro;
   }
 }
 
@@ -677,6 +859,14 @@ async function atualizarFormConfiguracao() {
   document.getElementById('cfgCuf').value = c.cUFAutor || '35';
   document.getElementById('cfgPfx').value = c.certificado_pfx || '';
   document.getElementById('cfgPastaSaida').value = c.pasta_saida || '';
+}
+
+function clicarAlternarSenha() {
+  const campo = document.getElementById('cfgSenha');
+  const btn = document.getElementById('btnOlhoCfgSenha');
+  const visivel = campo.type === 'text';
+  campo.type = visivel ? 'password' : 'text';
+  btn.textContent = visivel ? 'Mostrar' : 'Ocultar';
 }
 
 async function clicarEscolherCfgPfx() {
