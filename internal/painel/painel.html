@@ -107,9 +107,26 @@
   .status-form.erro { color: var(--erro); }
   .resultado-item { display: flex; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
   .resultado-item .valor2 { text-align: right; }
+
+  #loadingOverlay {
+    position: fixed; inset: 0; background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999; flex-direction: column; gap: 10px;
+  }
+  .spinner {
+    width: 22px; height: 22px; border-radius: 50%;
+    border: 2px solid var(--border); border-top-color: var(--accent);
+    animation: girar 0.7s linear infinite;
+  }
+  @keyframes girar { to { transform: rotate(360deg); } }
+  #loadingOverlay span { font-size: 12.5px; color: var(--muted); }
 </style>
 </head>
 <body>
+  <div id="loadingOverlay">
+    <div class="spinner"></div>
+    <span>Carregando…</span>
+  </div>
   <header>
     <div class="header-top">
       <div>
@@ -561,8 +578,10 @@ function clicarReconfigurar() {
   }
 }
 
-carregarCatalogo();
-iniciarToggleBusca().then(() => { if (buscaAutomatica) clicarBuscarAgora(); });
+Promise.all([carregarCatalogo(), iniciarToggleBusca()]).then(() => {
+  document.getElementById('loadingOverlay').style.display = 'none';
+  if (buscaAutomatica) clicarBuscarAgora();
+});
 </script>
 </body>
 </html>

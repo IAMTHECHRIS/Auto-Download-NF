@@ -90,10 +90,6 @@ func BuscarUma(cfg appconfig.Config, chave string) (document.Document, string, e
 	return doc, caminho, nil
 }
 
-// AnoFoco — foco em 2026 por pedido do Ismael (reduz volume; documentos de
-// outros anos vêm na resposta mas são descartados).
-const AnoFoco = 2026
-
 func Run(cfg appconfig.Config) error {
 	outDir := filepath.Join(cfg.PastaSaida, "nfe-compras")
 	checkpointPath := filepath.Join(cfg.PastaSaida, ".checkpoint-nfedist-nsu")
@@ -109,7 +105,7 @@ func Run(cfg appconfig.Config) error {
 	}
 	fmt.Printf("[NFe] Retomando a partir do NSU %d\n", nsu)
 
-	var resumos, eventos, outrosSchemas, erros, forasDoAno, cancelamentos, semReferencia int
+	var resumos, eventos, outrosSchemas, erros, cancelamentos, semReferencia int
 
 	type registro struct {
 		caminho string
@@ -148,10 +144,6 @@ func Run(cfg appconfig.Config) error {
 					erros++
 					continue
 				}
-				if data.Year() != AnoFoco {
-					forasDoAno++
-					continue
-				}
 				doc := document.Document{
 					Tipo:       document.TipoNFEC,
 					Fornecedor: fornecedor,
@@ -181,10 +173,6 @@ func Run(cfg appconfig.Config) error {
 				if err != nil {
 					log.Printf("[NFe]   NSU %s: erro ao parsear procNFe: %v", docZip.NSU, err)
 					erros++
-					continue
-				}
-				if doc.Data.Year() != AnoFoco {
-					forasDoAno++
 					continue
 				}
 				caminho, err := organizer.PlaceDocument(outDir, doc, ".xml", xmlBytes)
@@ -256,8 +244,8 @@ func Run(cfg appconfig.Config) error {
 	}
 
 	fmt.Println("[NFe] === Resumo ===")
-	fmt.Printf("[NFe] processados=%d cancelados=%d semRef=%d foraAno=%d outrosSchemas=%d erros=%d checkpoint=%d\n",
-		resumos, cancelamentos, semReferencia, forasDoAno, outrosSchemas, erros, nsu)
+	fmt.Printf("[NFe] processados=%d cancelados=%d semRef=%d outrosSchemas=%d erros=%d checkpoint=%d\n",
+		resumos, cancelamentos, semReferencia, outrosSchemas, erros, nsu)
 
 	return nil
 }

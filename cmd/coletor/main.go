@@ -54,20 +54,24 @@ func main() {
 			log.Fatalf("carregar configuração: %v", err)
 		}
 
-		// só faz sentido no Windows; em outros sistemas não faz nada (ver
-		// internal/wintask).
-		if err := wintask.EnsureDailyTask("08:00"); err != nil {
-			log.Printf("aviso: não consegui criar a tarefa agendada automaticamente: %v", err)
-			log.Println("(a coleta de hoje continua normalmente mesmo assim — só não ficou agendada sozinha)")
-		}
-
 		if rodandoViaAgendador() || runtime.GOOS != "windows" {
+			// aqui não tem janela nenhuma esperando — pode registrar a
+			// tarefa de forma síncrona sem incomodar ninguém.
+			garantirTarefaAgendada()
 			rodarColeta(cfg)
 			return
 		}
 
-		// duplo-clique manual: mostra o painel (que já dispara uma busca em
-		// segundo plano assim que abre).
+		// duplo-clique manual: registra a tarefa agendada EM PARALELO — na
+		// primeira vez isso chama o PowerShell (Register-ScheduledTask), que
+		// demora um pouco. Se isso rodasse antes de abrir a janela, a janela
+		// só apareceria depois de 1-2s parada, parecendo travada. Rodando em
+		// goroutine, a janela do painel aparece na hora e o registro
+		// acontece por trás, sem o usuário perceber.
+		go garantirTarefaAgendada()
+
+		// mostra o painel (o próprio painel decide se busca notas sozinho,
+		// baseado em cfg.AutoBuscarAoAbrir).
 		querReconfigurar, err := painel.Abrir(cfg)
 		if err != nil {
 			log.Printf("painel: %v", err)
@@ -141,6 +145,15 @@ func encerrarAqui() bool {
 	_ = os.Remove(appconfig.CaminhoArquivo())
 
 	return true
+}
+
+// garantirTarefaAgendada só faz sentido no Windows; em outros sistemas não
+// faz nada (ver internal/wintask).
+func garantirTarefaAgendada() {
+	if err := wintask.EnsureDailyTask("08:00"); err != nil {
+		log.Printf("aviso: não consegui criar a tarefa agendada automaticamente: %v", err)
+		log.Println("(a coleta de hoje continua normalmente mesmo assim — só não ficou agendada sozinha)")
+	}
 }
 
 func rodarColeta(cfg appconfig.Config) {
