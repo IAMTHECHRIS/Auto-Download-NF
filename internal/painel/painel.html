@@ -230,6 +230,9 @@
       </select>
       <span id="status-busca" class="status-busca-texto"></span>
       <button class="btn-principal" id="btnBuscar" onclick="clicarBuscarAgora()">Buscar notas agora</button>
+      <span style="flex:1"></span>
+      <span id="status-download-entrada" class="status-busca-texto"></span>
+      <button class="btn-secundario" onclick="clicarBaixarSelecionados('entrada')">Baixar selecionados</button>
     </div>
     <main>
       <table id="tabela-entrada"></table>
@@ -254,6 +257,9 @@
       </select>
       <span id="status-busca2" class="status-busca-texto"></span>
       <button class="btn-principal" onclick="clicarBuscarAgora()">Buscar notas agora</button>
+      <span style="flex:1"></span>
+      <span id="status-download-saida" class="status-busca-texto"></span>
+      <button class="btn-secundario" onclick="clicarBaixarSelecionados('saida')">Baixar selecionados</button>
     </div>
     <main>
       <table id="tabela-saida"></table>
@@ -275,6 +281,20 @@
       </div>
       <button class="btn-principal" id="btnBuscarChave" onclick="clicarBuscarPorChave()">Buscar essa nota</button>
       <div class="status-form" id="status-chave"></div>
+
+      <div class="campo" id="resultadoChaveBox" style="display:none; margin-top:18px;">
+        <label>Baixar esta nota</label>
+        <div style="display:flex; align-items:center; gap:16px;">
+          <label style="display:flex; align-items:center; gap:5px; font-size:13px; font-weight:400; text-transform:none; color:var(--text);">
+            <input type="checkbox" id="chkChaveXml"> XML
+          </label>
+          <label id="lblChavePdf" style="display:flex; align-items:center; gap:5px; font-size:13px; font-weight:400; text-transform:none; color:var(--text);">
+            <input type="checkbox" id="chkChavePdf"> PDF
+          </label>
+          <button class="btn-secundario" onclick="clicarBaixarResultadoChave()">Baixar</button>
+        </div>
+        <div class="status-form" id="status-download-chave"></div>
+      </div>
     </div>
   </section>
 
@@ -382,6 +402,22 @@
 let todasEntradas = [];
 let pastaVerificarEscolhida = '';
 let buscaAutomatica = false;
+
+// --- Seleção de download (XML/PDF) nas tabelas Entrada/Saída ---
+// Mapa caminho-do-XML -> {xml, pdf}. Compartilhado entre as duas abas (não
+// precisa ser por aba: só importa o que está marcado na hora de clicar
+// "Baixar selecionados", não importa em qual tabela a linha apareceu).
+const downloadSel = new Map();
+function downloadMarcado(caminho, tipo) {
+  const s = downloadSel.get(caminho);
+  return !!(s && s[tipo]);
+}
+function marcarDownload(caminho, tipo, valor) {
+  let s = downloadSel.get(caminho);
+  if (!s) { s = { xml: false, pdf: false }; downloadSel.set(caminho, s); }
+  s[tipo] = valor;
+  if (!s.xml && !s.pdf) downloadSel.delete(caminho);
+}
 
 function filtrosVazios() {
   // fornecedor/numero/valor: null = sem filtro (mostra tudo), ou um Set
@@ -545,11 +581,31 @@ function renderizarTabela(estado) {
         if (col.chave) td.innerHTML = CELULAS[col.chave](e);
         tr.appendChild(td);
       }
+      const tdAcao = tr.lastElementChild;
+
+      const wrapChk = document.createElement('span');
+      wrapChk.style.cssText = 'display:inline-flex; gap:10px; margin-right:10px;';
+      const mkChk = (tipo, desabilitado) => {
+        const lbl = document.createElement('label');
+        lbl.style.cssText = 'font-size:11px; display:inline-flex; align-items:center; gap:3px; cursor:pointer;' + (desabilitado ? ' opacity:0.35; cursor:default;' : '');
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.disabled = !!desabilitado;
+        chk.checked = downloadMarcado(e.caminho, tipo);
+        chk.onchange = () => marcarDownload(e.caminho, tipo, chk.checked);
+        lbl.appendChild(chk);
+        lbl.appendChild(document.createTextNode(tipo.toUpperCase()));
+        return lbl;
+      };
+      wrapChk.appendChild(mkChk('xml', false));
+      wrapChk.appendChild(mkChk('pdf', !e.tem_pdf));
+      tdAcao.appendChild(wrapChk);
+
       const btn = document.createElement('button');
       btn.className = 'btn-secundario';
       btn.textContent = 'Abrir pasta';
       btn.onclick = () => abrir(e.caminho);
-      tr.lastElementChild.appendChild(btn);
+      tdAcao.appendChild(btn);
       tbody.appendChild(tr);
     }
 
@@ -772,7 +828,65 @@ async function clicarToggleBusca() {
   await window.definirBuscaAutomatica(buscaAutomatica);
 }
 
+// --- Baixar selecionados (Entrada/Saída) ---
+async function clicarBaixarSelecionados(sufixo) {
+  const status = document.getElementById('status-download-' + sufixo);
+  if (downloadSel.size === 0) {
+    status.className = 'status-busca-texto erro';
+    status.textContent = 'Marque XML e/ou PDF de pelo menos uma nota.';
+    return;
+  }
+  const pasta = await window.escolherPasta();
+  if (!pasta) return;
+
+  status.className = 'status-busca-texto';
+  status.textContent = 'Baixando...';
+
+  const itens = Array.from(downloadSel.entries()).map(([caminho, s]) => ({ caminho, xml: s.xml, pdf: s.pdf }));
+  const resultado = await window.baixarSelecionados(JSON.stringify(itens), pasta);
+  const r = JSON.parse(resultado);
+
+  status.className = 'status-busca-texto ' + (r.ok ? 'ok' : 'erro');
+  status.textContent = r.ok ? r.mensagem : r.erro;
+}
+
 // --- Buscar por chave ---
+let chaveResultadoCaminho = '';
+
+function mostrarResultadoChave(caminho, temPdf) {
+  chaveResultadoCaminho = caminho;
+  document.getElementById('resultadoChaveBox').style.display = 'block';
+  document.getElementById('chkChaveXml').checked = true;
+  const chkPdf = document.getElementById('chkChavePdf');
+  chkPdf.checked = false;
+  chkPdf.disabled = !temPdf;
+  document.getElementById('lblChavePdf').style.opacity = temPdf ? '1' : '0.35';
+  document.getElementById('status-download-chave').textContent = '';
+}
+
+async function clicarBaixarResultadoChave() {
+  const status = document.getElementById('status-download-chave');
+  const xml = document.getElementById('chkChaveXml').checked;
+  const pdf = document.getElementById('chkChavePdf').checked;
+  if (!xml && !pdf) {
+    status.className = 'status-form erro';
+    status.textContent = 'Marque XML e/ou PDF.';
+    return;
+  }
+  const pasta = await window.escolherPasta();
+  if (!pasta) return;
+
+  status.className = 'status-form';
+  status.textContent = 'Baixando...';
+
+  const itens = [{ caminho: chaveResultadoCaminho, xml, pdf }];
+  const resultado = await window.baixarSelecionados(JSON.stringify(itens), pasta);
+  const r = JSON.parse(resultado);
+
+  status.className = 'status-form ' + (r.ok ? 'ok' : 'erro');
+  status.textContent = r.ok ? r.mensagem : r.erro;
+}
+
 async function clicarBuscarPorChave() {
   const btn = document.getElementById('btnBuscarChave');
   const status = document.getElementById('status-chave');
@@ -797,10 +911,12 @@ async function clicarBuscarPorChave() {
     status.className = 'status-form ok';
     status.textContent = r.mensagem;
     document.getElementById('chaveInput').value = '';
+    mostrarResultadoChave(r.caminho, r.tem_pdf);
     await carregarCatalogo();
   } else {
     status.className = 'status-form erro';
     status.textContent = r.erro;
+    document.getElementById('resultadoChaveBox').style.display = 'none';
   }
   btn.disabled = false;
 }

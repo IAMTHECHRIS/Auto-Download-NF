@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"io-nf-automation/internal/appconfig"
@@ -33,6 +34,7 @@ type Entrada struct {
 	Status       string    `json:"status"`
 	Chave        string    `json:"chave"`
 	Caminho      string    `json:"caminho"`
+	TemPDF       bool      `json:"tem_pdf"`
 }
 
 func caminhoCSV(pastaSaida string) string {
@@ -128,6 +130,12 @@ func Listar(pastaSaida string) ([]Entrada, error) {
 			Status:       linha[6],
 			Chave:        linha[7],
 			Caminho:      linha[8],
+		}
+		if e.Caminho != "" {
+			pdfPath := strings.TrimSuffix(e.Caminho, filepath.Ext(e.Caminho)) + ".pdf"
+			if _, err := os.Stat(pdfPath); err == nil {
+				e.TemPDF = true
+			}
 		}
 
 		if e.Chave == "" {

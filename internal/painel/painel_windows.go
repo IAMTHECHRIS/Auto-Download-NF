@@ -147,7 +147,10 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 		if contadorConsultasChave >= 5 {
 			msg += fmt.Sprintf(" — atenção: já são %d consultas avulsas nessa sessão; não temos confirmação do limite diário da SEFAZ pra esse tipo de busca, evite repetir sem necessidade.", contadorConsultasChave)
 		}
-		return respostaOK(msg)
+		pdfCaminho := strings.TrimSuffix(caminho, filepath.Ext(caminho)) + ".pdf"
+		_, errPdf := os.Stat(pdfCaminho)
+		b, _ := json.Marshal(map[string]any{"ok": true, "mensagem": msg, "caminho": caminho, "tem_pdf": errPdf == nil})
+		return string(b)
 	})
 
 	// pastaDestino agora é escolhida NA HORA pelo usuário (botão "Procurar"
@@ -193,6 +196,65 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 		}
 		debugLog.Printf("<< gerarZip ok")
 		return respostaOK(fmt.Sprintf("ZIP com %d nota(s) criado em: %s", len(caminhos), caminhoZip))
+	})
+
+	// baixarSelecionados atende tanto a lista Entrada/Saída quanto o
+	// resultado de "Buscar por chave": cada item diz de qual nota (pelo
+	// caminho do XML, sempre a referência) quer XML e/ou PDF. Um arquivo só
+	// -> copia direto; mais de um -> empacota em ZIP (mesmo helper de
+	// gerarZip). PDF que não existe (nota sem DANFE gerado ainda, ou NFSe)
+	// é ignorado silenciosamente em vez de dar erro.
+	w.Bind("baixarSelecionados", func(itensJSON string, pastaDestino string) string {
+		var itens []struct {
+			Caminho string `json:"caminho"`
+			XML     bool   `json:"xml"`
+			PDF     bool   `json:"pdf"`
+		}
+		if err := json.Unmarshal([]byte(itensJSON), &itens); err != nil {
+			return respostaErro("dados inválidos: " + err.Error())
+		}
+		if strings.TrimSpace(pastaDestino) == "" {
+			return respostaErro("escolha a pasta de destino antes.")
+		}
+
+		var arquivos []string
+		for _, it := range itens {
+			if it.Caminho == "" {
+				continue
+			}
+			if it.XML {
+				arquivos = append(arquivos, it.Caminho)
+			}
+			if it.PDF {
+				pdfCaminho := strings.TrimSuffix(it.Caminho, filepath.Ext(it.Caminho)) + ".pdf"
+				if _, err := os.Stat(pdfCaminho); err == nil {
+					arquivos = append(arquivos, pdfCaminho)
+				}
+			}
+		}
+		if len(arquivos) == 0 {
+			return respostaErro("nada pra baixar — marque XML e/ou PDF de pelo menos uma nota (o PDF só existe pra NFe/CT-e já processadas com o DANFE novo).")
+		}
+		debugLog.Printf(">> baixarSelecionados destino=%s itens=%d", pastaDestino, len(arquivos))
+
+		if len(arquivos) == 1 {
+			destino := filepath.Join(pastaDestino, filepath.Base(arquivos[0]))
+			if err := copiarArquivo(arquivos[0], destino); err != nil {
+				debugLog.Printf("<< baixarSelecionados erro: %v", err)
+				return respostaErro(err.Error())
+			}
+			debugLog.Printf("<< baixarSelecionados ok (arquivo único)")
+			return respostaOK("Arquivo salvo em: " + destino)
+		}
+
+		nomeZip := fmt.Sprintf("notas-%s.zip", time.Now().Format("20060102-1504"))
+		caminhoZip := filepath.Join(pastaDestino, nomeZip)
+		if err := criarZip(caminhoZip, arquivos); err != nil {
+			debugLog.Printf("<< baixarSelecionados erro: %v", err)
+			return respostaErro(err.Error())
+		}
+		debugLog.Printf("<< baixarSelecionados ok (zip)")
+		return respostaOK(fmt.Sprintf("ZIP com %d arquivo(s) criado em: %s", len(arquivos), caminhoZip))
 	})
 
 	w.Bind("obterBuscaAutomatica", func() bool {
@@ -406,6 +468,25 @@ func criarZip(destino string, arquivos []string) error {
 		if err := adicionarAoZip(zw, caminho); err != nil {
 			return fmt.Errorf("adicionar %s ao zip: %w", filepath.Base(caminho), err)
 		}
+	}
+	return nil
+}
+
+func copiarArquivo(origem, destino string) error {
+	src, err := os.Open(origem)
+	if err != nil {
+		return fmt.Errorf("abrir %s: %w", filepath.Base(origem), err)
+	}
+	defer src.Close()
+
+	dst, err := os.Create(destino)
+	if err != nil {
+		return fmt.Errorf("criar %s: %w", filepath.Base(destino), err)
+	}
+	defer dst.Close()
+
+	if _, err := io.Copy(dst, src); err != nil {
+		return fmt.Errorf("copiar %s: %w", filepath.Base(origem), err)
 	}
 	return nil
 }

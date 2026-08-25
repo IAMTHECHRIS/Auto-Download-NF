@@ -7,6 +7,8 @@ config.json
 # Dados fiscais reais capturados
 dados-fiscais/
 /root/dados-fiscais/
+testdata/danfe/*.xml
+testdata/danfe/*.pdf
 
 # Binários compilados (o usuário baixa via release, não commita)
 dist/

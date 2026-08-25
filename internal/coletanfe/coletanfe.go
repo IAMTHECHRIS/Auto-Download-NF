@@ -13,9 +13,11 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"io-nf-automation/internal/appconfig"
 	"io-nf-automation/internal/catalogo"
+	"io-nf-automation/internal/danfe"
 	"io-nf-automation/internal/document"
 	"io-nf-automation/internal/nfedist"
 	"io-nf-automation/internal/organizer"
@@ -23,6 +25,27 @@ import (
 
 // MaxPaginas — cautela deliberada: não varrer tudo numa tacada só.
 const MaxPaginas = 3
+
+// geradorDANFE aparece no rodapé do PDF ("Gerado por ...").
+const geradorDANFE = "I.O NF Automation"
+
+// gerarDANFEAoLado tenta montar o DANFE em PDF a partir do MESMO xmlBytes já
+// gravado, salvando ao lado do XML (mesmo nome-base, extensão .pdf). Só
+// funciona pro schema procNFe_v4.00.xsd (nota completa) — resNFe é resumo,
+// não tem campo suficiente (endereço, itens, impostos) pra montar o DANFE
+// oficial. Nunca é erro fatal: se falhar, loga e segue — o XML (o dado que
+// importa de verdade) já foi salvo antes disso ser chamado.
+func gerarDANFEAoLado(caminhoXML string, xmlBytes []byte) {
+	pdfBytes, err := danfe.GerarDeXML(xmlBytes, geradorDANFE)
+	if err != nil {
+		log.Printf("[NFe] aviso: não deu pra gerar o DANFE de %s: %v", filepath.Base(caminhoXML), err)
+		return
+	}
+	caminhoPDF := strings.TrimSuffix(caminhoXML, filepath.Ext(caminhoXML)) + ".pdf"
+	if err := os.WriteFile(caminhoPDF, pdfBytes, 0o644); err != nil {
+		log.Printf("[NFe] aviso: não deu pra gravar o DANFE de %s: %v", filepath.Base(caminhoXML), err)
+	}
+}
 
 // BuscarUma pede UMA nota específica pela chave de acesso (44 dígitos) —
 // usada quando o usuário apaga um XML sem querer e quer recuperar só
@@ -86,6 +109,9 @@ func BuscarUma(cfg appconfig.Config, chave string) (document.Document, string, e
 	}
 	if err := catalogo.Registrar(cfg.PastaSaida, doc, caminho); err != nil {
 		log.Printf("[NFe] aviso ao registrar no catálogo: %v", err)
+	}
+	if docZip.Schema == "procNFe_v4.00.xsd" {
+		gerarDANFEAoLado(caminho, xmlBytes)
 	}
 
 	return doc, caminho, nil
@@ -190,6 +216,7 @@ func Run(cfg appconfig.Config) error {
 				if err := catalogo.Registrar(cfg.PastaSaida, doc, caminho); err != nil {
 					log.Printf("[NFe]   NSU %s: aviso ao registrar no catálogo: %v", docZip.NSU, err)
 				}
+				gerarDANFEAoLado(caminho, xmlBytes)
 				resumos++
 				fmt.Printf("[NFe]   NSU %s [procNFe completo] -> %s\n", docZip.NSU, caminho)
 
