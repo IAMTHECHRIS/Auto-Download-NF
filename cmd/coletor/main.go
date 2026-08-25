@@ -163,7 +163,9 @@ func rodarColeta(cfg appconfig.Config) {
 	// disparo chamaria a API de novo à toa — não é o "Consumo Indevido"
 	// (esse vem de reiniciar o NSU do zero), mas é uma chamada desnecessária
 	// mesmo assim.
-	marcador := filepath.Join(cfg.PastaSaida, ".ultima-coleta-sucesso")
+	pastaControle := appconfig.PastaControle(cfg.PastaSaida)
+	_ = os.MkdirAll(pastaControle, 0o755)
+	marcador := filepath.Join(pastaControle, ".ultima-coleta-sucesso")
 	hoje := time.Now().Format("2006-01-02")
 
 	if dados, err := os.ReadFile(marcador); err == nil && strings.TrimSpace(string(dados)) == hoje {

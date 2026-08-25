@@ -83,6 +83,23 @@
   }
   thead th:hover { color: var(--text); }
   thead th .seta { opacity: 0.5; font-size: 10px; }
+  thead th .filtro-icon { opacity: 0.5; font-size: 10px; margin-left: 4px; cursor: pointer; }
+  thead th .filtro-icon:hover { opacity: 1; }
+  thead th .filtro-icon.ativo { opacity: 1; color: var(--accent); }
+
+  #filtroPopup {
+    position: fixed; display: none; z-index: 1000;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    padding: 12px; box-shadow: 0 10px 30px rgba(0,0,0,0.45); min-width: 190px;
+  }
+  #filtroPopup label {
+    display: block; font-size: 11px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.03em; margin: 8px 0 4px;
+  }
+  #filtroPopup label:first-child { margin-top: 0; }
+  #filtroPopup input { width: 100%; font-size: 13px; }
+  .filtro-botoes { display: flex; gap: 8px; margin-top: 12px; }
+  .filtro-botoes button { flex: 1; padding: 7px 10px; font-size: 12px; }
   tbody td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
   tbody tr:hover { background: rgba(255,255,255,0.02); }
   .tag { display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; background: #232b45; color: var(--muted); }
@@ -146,7 +163,6 @@
   <!-- ABA: Entrada (compras + serviços recebidos) -->
   <section class="aba ativa" id="aba-entrada">
     <div class="barra">
-      <input type="text" placeholder="Buscar por fornecedor ou número..." oninput="entradaState.texto=this.value; renderizarTabela(entradaState)">
       <select onchange="entradaState.tipo=this.value; renderizarTabela(entradaState)">
         <option value="">Todos os tipos</option>
         <option value="NFEC">NFEC (compra)</option>
@@ -173,7 +189,6 @@
   <!-- ABA: Saída (só o que a empresa emitiu) -->
   <section class="aba" id="aba-saida">
     <div class="barra">
-      <input type="text" placeholder="Buscar por tomador ou número..." oninput="saidaState.texto=this.value; renderizarTabela(saidaState)">
       <select onchange="saidaState.status=this.value; renderizarTabela(saidaState)">
         <option value="">Todos os status</option>
         <option value="normal">Normal</option>
@@ -282,8 +297,15 @@
       <button class="btn-principal" onclick="clicarSalvarConfiguracao()">Salvar configuração</button>
       <button class="btn-link" onclick="clicarReconfigurar()">Refazer configuração do zero…</button>
       <div class="status-form" id="status-config"></div>
+
+      <hr style="border-color: var(--border); margin: 22px 0 14px;">
+      <p class="explicacao" style="margin-bottom: 8px;">Pra parar de usar o programa de vez.</p>
+      <button class="btn-link" style="color: var(--erro);" onclick="clicarDesinstalar()">Desinstalar (remove a tarefa agendada)</button>
+      <div class="status-form" id="status-desinstalar"></div>
     </div>
   </section>
+
+  <div id="filtroPopup"></div>
 
 <script>
 // NOMES DE FUNÇÃO JS ABAIXO SÃO DE PROPÓSITO DIFERENTES dos nomes
@@ -296,17 +318,24 @@ let todasEntradas = [];
 let pastaVerificarEscolhida = '';
 let buscaAutomatica = false;
 
-const entradaState = { texto: '', tipo: '', status: '', ordenarPor: 'data', ordemAsc: false };
-const saidaState   = { texto: '', tipo: '', status: '', ordenarPor: 'data', ordemAsc: false };
+function filtrosVazios() {
+  return { fornecedor: '', numero: '', dataDe: '', dataAte: '', valorMin: '', valorMax: '' };
+}
+const entradaState = { filtros: filtrosVazios(), tipo: '', status: '', ordenarPor: 'data', ordemAsc: false };
+const saidaState   = { filtros: filtrosVazios(), tipo: '', status: '', ordenarPor: 'data', ordemAsc: false };
 
+// filtravel: coluna ganha o ícone "▾" no cabeçalho (estilo Excel) — clicar
+// nele abre um popup pra filtrar só aquela coluna, digitando (fornecedor/
+// número) ou por faixa (data/valor). Clicar no NOME da coluna (não no
+// ícone) continua ordenando, como já era.
 const COLUNAS = [
-  { chave: 'data', rotulo: 'Data' },
-  { chave: 'tipo', rotulo: 'Tipo' },
-  { chave: 'fornecedor', rotulo: 'Fornecedor' },
-  { chave: 'numero', rotulo: 'Número' },
-  { chave: 'valor', rotulo: 'Valor' },
-  { chave: 'status', rotulo: 'Status' },
-  { chave: '', rotulo: '' },
+  { chave: 'data', rotulo: 'Data', filtravel: true },
+  { chave: 'tipo', rotulo: 'Tipo', filtravel: false },
+  { chave: 'fornecedor', rotulo: 'Fornecedor', filtravel: true },
+  { chave: 'numero', rotulo: 'Número', filtravel: true },
+  { chave: 'valor', rotulo: 'Valor', filtravel: true },
+  { chave: 'status', rotulo: 'Status', filtravel: false },
+  { chave: '', rotulo: '', filtravel: false },
 ];
 
 function mudarAba(nome) {
@@ -335,14 +364,22 @@ function renderizarTabela(estado) {
     ? todasEntradas.filter(e => e.tipo === 'NFES-EMITIDA')
     : todasEntradas.filter(e => e.tipo !== 'NFES-EMITIDA');
 
+  const f = estado.filtros;
   let filtradas = base.filter(e => {
     if (estado.tipo && e.tipo !== estado.tipo) return false;
     if (estado.status === 'CANCELADO' && !(e.status || '').toUpperCase().includes('CANCELADO')) return false;
     if (estado.status === 'normal' && (e.status || '').toUpperCase().includes('CANCELADO')) return false;
-    if (estado.texto) {
-      const t = estado.texto.toLowerCase();
-      if (!(e.fornecedor || '').toLowerCase().includes(t) && !(e.numero || '').toLowerCase().includes(t)) return false;
-    }
+
+    if (f.fornecedor && !(e.fornecedor || '').toLowerCase().includes(f.fornecedor.toLowerCase())) return false;
+    if (f.numero && !(e.numero || '').toLowerCase().includes(f.numero.toLowerCase())) return false;
+
+    const dataISO = (e.data || '').substring(0, 10);
+    if (f.dataDe && dataISO < f.dataDe) return false;
+    if (f.dataAte && dataISO > f.dataAte) return false;
+
+    if (f.valorMin && e.valor < parseFloat(f.valorMin.replace(',', '.'))) return false;
+    if (f.valorMax && e.valor > parseFloat(f.valorMax.replace(',', '.'))) return false;
+
     return true;
   });
 
@@ -373,12 +410,31 @@ function renderizarTabela(estado) {
       const th = document.createElement('th');
       if (col.chave) {
         const seta = estado.ordenarPor === col.chave ? (estado.ordemAsc ? '▲' : '▼') : '';
-        th.innerHTML = col.rotulo + ' <span class="seta">' + seta + '</span>';
-        th.onclick = () => {
+
+        const rotulo = document.createElement('span');
+        rotulo.textContent = col.rotulo;
+        rotulo.onclick = () => {
           if (estado.ordenarPor === col.chave) estado.ordemAsc = !estado.ordemAsc;
           else { estado.ordenarPor = col.chave; estado.ordemAsc = false; }
           renderizarTabela(estado);
         };
+        th.appendChild(rotulo);
+
+        const setaEl = document.createElement('span');
+        setaEl.className = 'seta';
+        setaEl.textContent = ' ' + seta;
+        th.appendChild(setaEl);
+
+        if (col.filtravel) {
+          const icone = document.createElement('span');
+          icone.className = 'filtro-icon' + (colunaTemFiltroAtivo(col.chave, estado) ? ' ativo' : '');
+          icone.textContent = '▾';
+          icone.onclick = (ev) => {
+            ev.stopPropagation();
+            abrirFiltro(col.chave, icone, estado);
+          };
+          th.appendChild(icone);
+        }
       }
       trh.appendChild(th);
     }
@@ -414,6 +470,92 @@ function renderizarTabela(estado) {
     filtradas.length + (filtradas.length === 1 ? ' nota' : ' notas') +
     (filtradas.length !== base.length ? ' (de ' + base.length + ')' : '');
 }
+
+// --- Filtro por coluna (estilo Excel: ícone ▾ no cabeçalho abre um popup) ---
+
+function colunaTemFiltroAtivo(coluna, estado) {
+  const f = estado.filtros;
+  if (coluna === 'fornecedor') return !!f.fornecedor;
+  if (coluna === 'numero') return !!f.numero;
+  if (coluna === 'data') return !!(f.dataDe || f.dataAte);
+  if (coluna === 'valor') return !!(f.valorMin || f.valorMax);
+  return false;
+}
+
+let filtroAberto = null; // { coluna, estado }
+
+function abrirFiltro(coluna, ancora, estado) {
+  const popup = document.getElementById('filtroPopup');
+  const rect = ancora.getBoundingClientRect();
+  popup.style.left = Math.min(rect.left, window.innerWidth - 220) + 'px';
+  popup.style.top = (rect.bottom + 6) + 'px';
+
+  const f = estado.filtros;
+  let html = '';
+  if (coluna === 'fornecedor' || coluna === 'numero') {
+    const valorAtual = coluna === 'fornecedor' ? f.fornecedor : f.numero;
+    html = `<label>Contém</label><input type="text" id="filtroCampo1" value="${valorAtual || ''}" placeholder="Digite pra filtrar...">`;
+  } else if (coluna === 'data') {
+    html = `<label>De</label><input type="date" id="filtroCampo1" value="${f.dataDe || ''}">
+            <label>Até</label><input type="date" id="filtroCampo2" value="${f.dataAte || ''}">`;
+  } else if (coluna === 'valor') {
+    html = `<label>Mínimo</label><input type="text" id="filtroCampo1" inputmode="decimal" value="${f.valorMin || ''}" placeholder="0,00">
+            <label>Máximo</label><input type="text" id="filtroCampo2" inputmode="decimal" value="${f.valorMax || ''}" placeholder="0,00">`;
+  }
+  html += `<div class="filtro-botoes">
+    <button class="btn-secundario" onclick="limparFiltroAtual()">Limpar</button>
+    <button class="btn-principal" onclick="fecharFiltroPopup()">OK</button>
+  </div>`;
+
+  popup.innerHTML = html;
+  popup.style.display = 'block';
+  filtroAberto = { coluna, estado };
+
+  popup.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => aplicarFiltroAtual());
+    inp.focus();
+  });
+}
+
+function aplicarFiltroAtual() {
+  if (!filtroAberto) return;
+  const { coluna, estado } = filtroAberto;
+  const c1 = document.getElementById('filtroCampo1');
+  const c2 = document.getElementById('filtroCampo2');
+
+  if (coluna === 'fornecedor') estado.filtros.fornecedor = c1.value;
+  if (coluna === 'numero') estado.filtros.numero = c1.value;
+  if (coluna === 'data') { estado.filtros.dataDe = c1.value; estado.filtros.dataAte = c2.value; }
+  if (coluna === 'valor') { estado.filtros.valorMin = c1.value; estado.filtros.valorMax = c2.value; }
+
+  renderizarTabela(estado);
+  // renderizarTabela reabre um popup novo (cabeçalho é reconstruído) —
+  // como o usuário ainda está digitando, mantém o mesmo aberto em vez de
+  // fechar, só perde o "aceso" visual do ícone até o próximo render.
+}
+
+function limparFiltroAtual() {
+  if (!filtroAberto) return;
+  const { coluna, estado } = filtroAberto;
+  if (coluna === 'fornecedor') estado.filtros.fornecedor = '';
+  if (coluna === 'numero') estado.filtros.numero = '';
+  if (coluna === 'data') { estado.filtros.dataDe = ''; estado.filtros.dataAte = ''; }
+  if (coluna === 'valor') { estado.filtros.valorMin = ''; estado.filtros.valorMax = ''; }
+  renderizarTabela(estado);
+  fecharFiltroPopup();
+}
+
+function fecharFiltroPopup() {
+  document.getElementById('filtroPopup').style.display = 'none';
+  filtroAberto = null;
+}
+
+document.addEventListener('click', (ev) => {
+  const popup = document.getElementById('filtroPopup');
+  if (popup.style.display === 'none') return;
+  if (popup.contains(ev.target) || ev.target.classList.contains('filtro-icon')) return;
+  fecharFiltroPopup();
+});
 
 async function carregarCatalogo() {
   const resultado = await window.listarCatalogo();
@@ -575,6 +717,26 @@ async function clicarSalvarConfiguracao() {
 function clicarReconfigurar() {
   if (confirm('Isso vai apagar a configuração atual e abrir o assistente do zero. As notas já baixadas continuam salvas. Confirma?')) {
     window.reconfigurar();
+  }
+}
+
+async function clicarDesinstalar() {
+  if (!confirm('Isso remove a tarefa agendada do Windows — a coleta diária automática para de acontecer. O programa, a configuração e as notas já baixadas NÃO são apagados. Confirma?')) {
+    return;
+  }
+  const status = document.getElementById('status-desinstalar');
+  status.className = 'status-form';
+  status.textContent = 'Removendo tarefa agendada...';
+
+  const resultado = await window.desinstalarTarefaAgendada();
+  const r = JSON.parse(resultado);
+
+  if (r.ok) {
+    status.className = 'status-form ok';
+    status.textContent = r.mensagem;
+  } else {
+    status.className = 'status-form erro';
+    status.textContent = r.erro;
   }
 }
 

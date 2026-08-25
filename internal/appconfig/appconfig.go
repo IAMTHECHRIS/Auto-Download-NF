@@ -33,6 +33,15 @@ type Config struct {
 	AutoBuscarAoAbrir bool `json:"auto_buscar_ao_abrir"`
 }
 
+// PastaControle é onde ficam o executável, config.json, catálogo,
+// checkpoints e logs — tudo que NÃO é nota fiscal. Fica separado numa
+// subpasta própria (nome com "_" na frente pra ordenar primeiro no
+// Explorer) pra não misturar arquivo técnico com nfe-compras/nfse na raiz
+// da pasta que o usuário escolheu pras notas.
+func PastaControle(pastaSaida string) string {
+	return filepath.Join(pastaSaida, "_Controle")
+}
+
 // configPath usa a PASTA ATUAL (não o caminho do .exe) — no Windows, dar
 // duplo-clique num .exe já deixa o diretório atual igual à pasta dele, e
 // aqui no desenvolvimento (rodando com "go run") isso também funciona

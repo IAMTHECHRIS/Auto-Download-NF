@@ -10,6 +10,7 @@ package coletanfe
 import (
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"strconv"
 
@@ -92,7 +93,11 @@ func BuscarUma(cfg appconfig.Config, chave string) (document.Document, string, e
 
 func Run(cfg appconfig.Config) error {
 	outDir := filepath.Join(cfg.PastaSaida, "nfe-compras")
-	checkpointPath := filepath.Join(cfg.PastaSaida, ".checkpoint-nfedist-nsu")
+	pastaControle := appconfig.PastaControle(cfg.PastaSaida)
+	if err := os.MkdirAll(pastaControle, 0o755); err != nil {
+		return fmt.Errorf("criar pasta _Controle: %w", err)
+	}
+	checkpointPath := filepath.Join(pastaControle, ".checkpoint-nfedist-nsu")
 
 	client, err := nfedist.NewClient(cfg.CertificadoPfx, cfg.CertificadoSenha)
 	if err != nil {

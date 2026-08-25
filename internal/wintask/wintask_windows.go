@@ -7,18 +7,26 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"syscall"
 )
 
 func garantirTarefa(horario string) error {
-	if existeTarefa() {
-		return nil
-	}
-
 	exe, err := os.Executable()
 	if err != nil {
 		return fmt.Errorf("descobrir caminho do executável: %w", err)
+	}
+
+	// Antes isso só checava "a tarefa existe?" e parava se sim — bug: depois
+	// de reinstalar em outra pasta (ex: durante testes), a tarefa antiga
+	// ficava presa apontando pro caminho velho, sem nunca ser corrigida.
+	// Agora compara o caminho REGISTRADO na tarefa com o executável atual;
+	// se bater, não mexe; se não bater (ou não existir), (re)registra do
+	// zero — Register-ScheduledTask -Force sobrescreve sem perguntar.
+	registrado, existe := caminhoRegistrado()
+	if existe && strings.EqualFold(filepath.Clean(registrado), filepath.Clean(exe)) {
+		return nil
 	}
 
 	// schtasks /Create básico (usado antes) não expõe "rodar assim que
@@ -55,16 +63,47 @@ Register-ScheduledTask -TaskName %s -Action $acao -Trigger @($gatilhoDiario, $ga
 		return fmt.Errorf("criar tarefa agendada: %w — saída: %s", err, saida)
 	}
 
-	fmt.Printf("Tarefa agendada criada: roda sozinho todo dia às %s.\n", horario)
+	if existe {
+		fmt.Println("Tarefa agendada estava desatualizada (apontava pra outro lugar) — corrigida.")
+	} else {
+		fmt.Printf("Tarefa agendada criada: roda sozinho todo dia às %s.\n", horario)
+	}
 	fmt.Println("Se o PC estiver desligado (ou você deslogado) nesse horário, ela roda")
 	fmt.Println("assim que ligar/entrar de novo — não precisa configurar nada manualmente.")
 
 	return nil
 }
 
-func existeTarefa() bool {
-	cmd := exec.Command("schtasks", "/Query", "/TN", nomeTarefa)
-	return cmd.Run() == nil
+// caminhoRegistrado devolve o executável que a tarefa (se existir) está
+// configurada pra rodar, e se ela existe. String vazia + false = não existe.
+func caminhoRegistrado() (string, bool) {
+	saida, err := rodarPowerShell(fmt.Sprintf(`
+$t = Get-ScheduledTask -TaskName %s -ErrorAction SilentlyContinue
+if ($t) { Write-Output $t.Actions[0].Execute }
+`, aspasPS(nomeTarefa)))
+	if err != nil {
+		return "", false
+	}
+	caminho := strings.Trim(strings.TrimSpace(saida), `"`)
+	if caminho == "" {
+		return "", false
+	}
+	return caminho, true
+}
+
+func removerTarefa() error {
+	cmd := exec.Command("schtasks", "/Delete", "/TN", nomeTarefa, "/F")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		// "não existe" não é erro de verdade pra quem só quer garantir que
+		// sumiu — trata como sucesso.
+		if strings.Contains(strings.ToUpper(string(out)), "ERRO: NAO FOI POSSIVEL LOCALIZAR") ||
+			strings.Contains(strings.ToUpper(string(out)), "CANNOT FIND") {
+			return nil
+		}
+		return fmt.Errorf("remover tarefa agendada: %w — saída: %s", err, string(out))
+	}
+	return nil
 }
 
 // aspasPS envolve a string em aspas simples pro PowerShell — '' escapa uma

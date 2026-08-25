@@ -30,6 +30,7 @@ import (
 	"sieg-automation/internal/coletanfe"
 	"sieg-automation/internal/coletansfe"
 	"sieg-automation/internal/verificacao"
+	"sieg-automation/internal/wintask"
 
 	"github.com/webview/webview_go"
 )
@@ -286,6 +287,16 @@ if ($pasta -ne $null) {
 		debugLog.Printf(">> reconfigurar chamado")
 		reconfigurar = true
 		w.Terminate()
+	})
+
+	w.Bind("desinstalarTarefaAgendada", func() string {
+		debugLog.Printf(">> desinstalarTarefaAgendada chamado")
+		if err := wintask.RemoverTarefa(); err != nil {
+			debugLog.Printf("<< erro ao remover tarefa: %v", err)
+			return respostaErro(err.Error())
+		}
+		debugLog.Printf("<< tarefa agendada removida")
+		return respostaOK("Tarefa agendada removida. O programa e as notas continuam onde estavam — só a coleta automática diária foi desligada.")
 	})
 
 	w.Bind("fecharJanela", func() {

@@ -8,3 +8,7 @@ package wintask
 func garantirTarefa(horario string) error {
 	return nil
 }
+
+func removerTarefa() error {
+	return nil
+}

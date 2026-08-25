@@ -25,10 +25,10 @@ import (
 const nomeExeInstalado = "coletor-notas-fiscais.exe"
 
 // PastaInstalada devolve onde o programa deveria morar pra essa
-// configuração — dentro da pasta de notas, numa subpasta própria (pra não
-// se misturar com XMLs/pastas ANO/MES/TIPO).
+// configuração — a mesma pasta "_Controle" onde ficam config.json,
+// catálogo, checkpoints e logs (ver appconfig.PastaControle).
 func PastaInstalada(cfg appconfig.Config) string {
-	return filepath.Join(cfg.PastaSaida, "programa")
+	return appconfig.PastaControle(cfg.PastaSaida)
 }
 
 // NecessarioRelocar diz se o executável ATUAL (o que está rodando agora)

@@ -5,6 +5,7 @@ package coletansfe
 import (
 	"fmt"
 	"log"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -26,7 +27,11 @@ func Run(cfg appconfig.Config) error {
 	}
 
 	outDir := filepath.Join(cfg.PastaSaida, "nfse")
-	checkpointPath := filepath.Join(cfg.PastaSaida, ".checkpoint-adn-nsu")
+	pastaControle := appconfig.PastaControle(cfg.PastaSaida)
+	if err := os.MkdirAll(pastaControle, 0o755); err != nil {
+		return fmt.Errorf("criar pasta _Controle: %w", err)
+	}
+	checkpointPath := filepath.Join(pastaControle, ".checkpoint-adn-nsu")
 
 	nsu, err := nfedist.LerCheckpoint(checkpointPath)
 	if err != nil {

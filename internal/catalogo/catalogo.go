@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"time"
 
+	"sieg-automation/internal/appconfig"
 	"sieg-automation/internal/document"
 )
 
@@ -35,7 +36,7 @@ type Entrada struct {
 }
 
 func caminhoCSV(pastaSaida string) string {
-	return filepath.Join(pastaSaida, "catalogo.csv")
+	return filepath.Join(appconfig.PastaControle(pastaSaida), "catalogo.csv")
 }
 
 // Registrar acrescenta uma linha nova — nunca reescreve o arquivo inteiro.
@@ -44,6 +45,9 @@ func caminhoCSV(pastaSaida string) string {
 // mostrar (a mais recente por chave), sem precisar editar a linha antiga.
 func Registrar(pastaSaida string, d document.Document, caminho string) error {
 	path := caminhoCSV(pastaSaida)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("criar pasta _Controle: %w", err)
+	}
 	_, err := os.Stat(path)
 	novo := os.IsNotExist(err)
 
