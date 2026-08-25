@@ -93,9 +93,9 @@
   }
   .toggle.ligado::before { content: '●'; color: #06281a; }
 
-  #status-busca { font-size: 12px; color: var(--muted); }
-  #status-busca.ok { color: var(--ok); }
-  #status-busca.erro { color: var(--erro); }
+  .status-busca-texto { font-size: 12px; color: var(--muted); }
+  .status-busca-texto.ok { color: var(--ok); }
+  .status-busca-texto.erro { color: var(--erro); }
 
   main { flex: 1; overflow: auto; padding: 0 24px 20px; }
   table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -104,15 +104,26 @@
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted);
     border-bottom: 1px solid var(--border); white-space: nowrap;
   }
-  thead th .rotulo-col { cursor: pointer; }
-  thead th:hover .rotulo-col { color: var(--text); }
-  thead th .seta { opacity: 0.5; font-size: 10px; }
+  /* Uma seta SÓ por coluna, estilo Excel: clicar nela abre um menu com
+     ordenar (A→Z / Z→A) + filtro — nunca ordena sozinha, nunca clicando
+     no nome. O indicador ▲/▼ ao lado só aparece na coluna que já está
+     ordenando no momento, é informativo, não é clicável. */
+  thead th .rotulo-col { cursor: default; }
+  thead th .seta { opacity: 0.7; font-size: 10px; color: var(--accent); }
   thead th .filtro-icon {
-    opacity: 0.6; font-size: 13px; margin-left: 5px; cursor: pointer;
-    padding: 2px 4px; border-radius: 4px;
+    opacity: 0.65; font-size: 13px; margin-left: 5px; cursor: pointer;
+    padding: 3px 6px; border-radius: 5px; border: 1px solid transparent;
   }
-  thead th .filtro-icon:hover { opacity: 1; background: rgba(255,255,255,0.08); }
-  thead th .filtro-icon.ativo { opacity: 1; color: var(--accent); }
+  thead th .filtro-icon:hover { opacity: 1; background: rgba(255,255,255,0.1); border-color: var(--border); }
+  thead th .filtro-icon.ativo { opacity: 1; color: var(--accent); background: rgba(79,124,255,0.12); }
+
+  .menu-ordenar { display: flex; flex-direction: column; gap: 2px; }
+  .menu-item {
+    text-align: left; background: transparent; border: none; padding: 8px 8px;
+    font-size: 12.5px; color: var(--text); cursor: pointer; border-radius: 6px; width: 100%;
+  }
+  .menu-item:hover { background: rgba(255,255,255,0.07); }
+  .menu-divisor { height: 1px; background: var(--border); margin: 8px 0; }
 
   #filtroPopup {
     position: fixed; display: none; z-index: 1000;
@@ -217,7 +228,7 @@
         <option value="normal">Normal</option>
         <option value="CANCELADO">Cancelado</option>
       </select>
-      <span id="status-busca"></span>
+      <span id="status-busca" class="status-busca-texto"></span>
       <button class="btn-principal" id="btnBuscar" onclick="clicarBuscarAgora()">Buscar notas agora</button>
     </div>
     <main>
@@ -241,7 +252,7 @@
         <option value="normal">Normal</option>
         <option value="CANCELADO">Cancelado</option>
       </select>
-      <span id="status-busca2"></span>
+      <span id="status-busca2" class="status-busca-texto"></span>
       <button class="btn-principal" onclick="clicarBuscarAgora()">Buscar notas agora</button>
     </div>
     <main>
@@ -380,18 +391,28 @@ function filtrosVazios() {
 const entradaState = { filtros: filtrosVazios(), tipo: 'NFEC', status: '', ordenarPor: 'data', ordemAsc: false };
 const saidaState   = { filtros: filtrosVazios(), tipo: '',     status: '', ordenarPor: 'data', ordemAsc: false };
 
-// filtravel: coluna ganha o ícone "▾" no cabeçalho (estilo Excel) — clicar
-// nele abre um popup pra filtrar só aquela coluna. Clicar no NOME da
-// coluna (não no ícone) continua ordenando.
+// Cada coluna tem UMA seta só (estilo Excel de verdade) — clicar nela abre
+// um menu único que junta ordenar (A→Z / Z→A) E filtrar. Clicar no NOME
+// da coluna não faz nada — só a seta decide.
+// tipoFiltro: 'checklist' (lista de valores com busca), 'faixa-data'
+// (de/até), ou 'nenhum' (só ordena, sem filtro).
 const COLUNAS = [
-  { chave: 'data', rotulo: 'Data', filtravel: true },
-  { chave: 'tipo', rotulo: 'Tipo', filtravel: false },
-  { chave: 'fornecedor', rotulo: 'Fornecedor', filtravel: true },
-  { chave: 'numero', rotulo: 'Número', filtravel: true },
-  { chave: 'valor', rotulo: 'Valor', filtravel: true },
-  { chave: 'status', rotulo: 'Status', filtravel: false },
-  { chave: '', rotulo: '', filtravel: false },
+  { chave: 'data', rotulo: 'Data', tipoFiltro: 'faixa-data' },
+  { chave: 'tipo', rotulo: 'Tipo', tipoFiltro: 'nenhum' },
+  { chave: 'fornecedor', rotulo: 'Fornecedor', tipoFiltro: 'checklist' },
+  { chave: 'numero', rotulo: 'Número', tipoFiltro: 'checklist' },
+  { chave: 'valor', rotulo: 'Valor', tipoFiltro: 'checklist' },
+  { chave: 'status', rotulo: 'Status', tipoFiltro: 'nenhum' },
+  { chave: '', rotulo: '', tipoFiltro: 'nenhum' },
 ];
+
+// Base (Entrada ou Saída, já filtrada pela sub-aba de tipo) usada tanto
+// pra montar a tabela quanto pra listar os valores únicos de um filtro.
+function baseParaEstado(estado) {
+  return (estado === saidaState)
+    ? todasEntradas.filter(e => e.tipo === 'NFES-EMITIDA')
+    : todasEntradas.filter(e => e.tipo !== 'NFES-EMITIDA' && (!estado.tipo || e.tipo === estado.tipo));
+}
 
 // Entrada não mostra a coluna Tipo — já está implícito na sub-aba
 // (NFEC/NFES) selecionada, mostrar de novo seria redundante.
@@ -419,6 +440,9 @@ function formatarData(iso) {
   const [ano, mes, dia] = iso.substring(0, 10).split('-');
   return `${dia}/${mes}/${ano}`;
 }
+function nomeBase(caminho) {
+  return (caminho || '').split(/[\\/]/).pop();
+}
 
 function abrir(caminho) {
   if (caminho) window.abrirPasta(caminho);
@@ -440,10 +464,7 @@ function renderizarTabela(estado) {
   const ehSaida = estado === saidaState;
   const sufixo = ehSaida ? 'saida' : 'entrada';
   const colunas = colunasPara(estado);
-
-  const base = ehSaida
-    ? todasEntradas.filter(e => e.tipo === 'NFES-EMITIDA')
-    : todasEntradas.filter(e => e.tipo !== 'NFES-EMITIDA' && (!estado.tipo || e.tipo === estado.tipo));
+  const base = baseParaEstado(estado);
 
   const f = estado.filtros;
   let filtradas = base.filter(e => {
@@ -487,33 +508,29 @@ function renderizarTabela(estado) {
     for (const col of colunas) {
       const th = document.createElement('th');
       if (col.chave) {
-        const seta = estado.ordenarPor === col.chave ? (estado.ordemAsc ? '▲' : '▼') : '';
-
         const rotulo = document.createElement('span');
         rotulo.className = 'rotulo-col';
         rotulo.textContent = col.rotulo;
-        rotulo.onclick = () => {
-          if (estado.ordenarPor === col.chave) estado.ordemAsc = !estado.ordemAsc;
-          else { estado.ordenarPor = col.chave; estado.ordemAsc = false; }
-          renderizarTabela(estado);
-        };
         th.appendChild(rotulo);
 
-        const setaEl = document.createElement('span');
-        setaEl.className = 'seta';
-        setaEl.textContent = ' ' + seta;
-        th.appendChild(setaEl);
-
-        if (col.filtravel) {
-          const icone = document.createElement('span');
-          icone.className = 'filtro-icon' + (colunaTemFiltroAtivo(col.chave, estado) ? ' ativo' : '');
-          icone.textContent = '▾';
-          icone.onclick = (ev) => {
-            ev.stopPropagation();
-            abrirFiltro(col.chave, icone, estado);
-          };
-          th.appendChild(icone);
+        // indicador ▲/▼: só aparece se ESSA for a coluna ordenando agora,
+        // e é só informativo — não clicável. Trocar ordenação é sempre
+        // pelo menu da seta.
+        if (estado.ordenarPor === col.chave) {
+          const setaEl = document.createElement('span');
+          setaEl.className = 'seta';
+          setaEl.textContent = ' ' + (estado.ordemAsc ? '▲' : '▼');
+          th.appendChild(setaEl);
         }
+
+        const icone = document.createElement('span');
+        icone.className = 'filtro-icon' + (colunaTemFiltroAtivo(col.chave, estado) ? ' ativo' : '');
+        icone.textContent = ' ▾';
+        icone.onclick = (ev) => {
+          ev.stopPropagation();
+          abrirMenuColuna(col, icone, estado);
+        };
+        th.appendChild(icone);
       }
       trh.appendChild(th);
     }
@@ -546,10 +563,10 @@ function renderizarTabela(estado) {
     (filtradas.length !== base.length ? ' (de ' + base.length + ')' : '');
 }
 
-// --- Filtro por coluna (estilo Excel) ---
-// Data: faixa de/até. Fornecedor/Número/Valor: checklist com busca — lista
-// os valores que aparecem na coluna, com caixinha de busca pra achar
-// rápido (igual o autofiltro do Excel), marca/desmarca quais entram.
+// --- Menu único por coluna (estilo Excel) ---
+// A seta abre ORDENAR (A→Z / Z→A, topo do menu) + FILTRAR (embaixo, se a
+// coluna tiver: faixa de/até pra Data, checklist com busca pras outras).
+// Nada acontece só de clicar no nome da coluna — sempre pela seta.
 
 function colunaTemFiltroAtivo(coluna, estado) {
   const f = estado.filtros;
@@ -565,24 +582,38 @@ function valoresUnicos(base, coluna) {
   return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
 
-let filtroAberto = null; // { coluna, estado, valoresDisponiveis?, marcados? }
+function rotulosOrdenacao(chave) {
+  if (chave === 'data') return ['Mais antiga primeiro', 'Mais recente primeiro'];
+  if (chave === 'valor') return ['Menor valor primeiro', 'Maior valor primeiro'];
+  return ['Ordenar A → Z', 'Ordenar Z → A'];
+}
 
-function abrirFiltro(coluna, ancora, estado) {
+let filtroAberto = null; // { coluna, estado, tipoFiltro, valoresDisponiveis?, marcados? }
+
+function abrirMenuColuna(col, ancora, estado) {
   const popup = document.getElementById('filtroPopup');
   const rect = ancora.getBoundingClientRect();
   popup.style.left = Math.min(rect.left, window.innerWidth - 290) + 'px';
   popup.style.top = (rect.bottom + 6) + 'px';
-  filtroAberto = { coluna, estado };
+  filtroAberto = { coluna: col.chave, estado, tipoFiltro: col.tipoFiltro };
 
-  if (coluna === 'data') {
+  const [rotuloAsc, rotuloDesc] = rotulosOrdenacao(col.chave);
+  popup.innerHTML = `
+    <div class="menu-ordenar">
+      <button class="menu-item" onclick="ordenarColuna(true)">${rotuloAsc}</button>
+      <button class="menu-item" onclick="ordenarColuna(false)">${rotuloDesc}</button>
+    </div>`;
+
+  if (col.tipoFiltro === 'faixa-data') {
     const f = estado.filtros;
-    popup.innerHTML = `
+    popup.insertAdjacentHTML('beforeend', `
+      <div class="menu-divisor"></div>
       <label>De</label><input type="date" id="filtroDe" value="${f.dataDe || ''}">
       <label>Até</label><input type="date" id="filtroAte" value="${f.dataAte || ''}">
       <div class="filtro-botoes">
         <button class="btn-secundario" onclick="limparFiltroAtual()">Limpar</button>
         <button class="btn-principal" onclick="fecharFiltroPopup()">OK</button>
-      </div>`;
+      </div>`);
     document.getElementById('filtroDe').addEventListener('input', (e) => {
       estado.filtros.dataDe = e.target.value;
       renderizarTabela(estado);
@@ -591,34 +622,40 @@ function abrirFiltro(coluna, ancora, estado) {
       estado.filtros.dataAte = e.target.value;
       renderizarTabela(estado);
     });
-    popup.style.display = 'block';
-    return;
+  } else if (col.tipoFiltro === 'checklist') {
+    const valores = valoresUnicos(baseParaEstado(estado), col.chave);
+    const selecionados = estado.filtros[col.chave];
+
+    popup.insertAdjacentHTML('beforeend', `
+      <div class="menu-divisor"></div>
+      <input type="text" id="filtroBusca" placeholder="Buscar...">
+      <div class="filtro-rapidas">
+        <a onclick="marcarTodosFiltro(true)">Marcar todos</a> ·
+        <a onclick="marcarTodosFiltro(false)">Limpar seleção</a>
+      </div>
+      <div class="filtro-lista" id="filtroLista"></div>
+      <div class="filtro-botoes">
+        <button class="btn-secundario" onclick="limparFiltroAtual()">Limpar</button>
+        <button class="btn-principal" onclick="aplicarChecklistEFechar()">OK</button>
+      </div>`);
+
+    filtroAberto.valoresDisponiveis = valores;
+    filtroAberto.marcados = new Set(selecionados ? Array.from(selecionados) : valores);
+
+    renderizarListaFiltro('');
+    document.getElementById('filtroBusca').addEventListener('input', (e) => renderizarListaFiltro(e.target.value));
   }
 
-  const base = (estado === saidaState)
-    ? todasEntradas.filter(e => e.tipo === 'NFES-EMITIDA')
-    : todasEntradas.filter(e => e.tipo !== 'NFES-EMITIDA' && (!estado.tipo || e.tipo === estado.tipo));
-  const valores = valoresUnicos(base, coluna);
-  const selecionados = estado.filtros[coluna];
-
-  popup.innerHTML = `
-    <input type="text" id="filtroBusca" placeholder="Buscar...">
-    <div class="filtro-rapidas">
-      <a onclick="marcarTodosFiltro(true)">Marcar todos</a> ·
-      <a onclick="marcarTodosFiltro(false)">Limpar seleção</a>
-    </div>
-    <div class="filtro-lista" id="filtroLista"></div>
-    <div class="filtro-botoes">
-      <button class="btn-secundario" onclick="limparFiltroAtual()">Limpar</button>
-      <button class="btn-principal" onclick="aplicarChecklistEFechar()">OK</button>
-    </div>`;
-
-  filtroAberto.valoresDisponiveis = valores;
-  filtroAberto.marcados = new Set(selecionados ? Array.from(selecionados) : valores);
-
-  renderizarListaFiltro('');
-  document.getElementById('filtroBusca').addEventListener('input', (e) => renderizarListaFiltro(e.target.value));
   popup.style.display = 'block';
+}
+
+function ordenarColuna(asc) {
+  if (!filtroAberto) return;
+  const estado = filtroAberto.estado;
+  estado.ordenarPor = filtroAberto.coluna;
+  estado.ordemAsc = asc;
+  renderizarTabela(estado);
+  fecharFiltroPopup();
 }
 
 function renderizarListaFiltro(busca) {
@@ -707,7 +744,7 @@ async function clicarBuscarAgora() {
   const status1 = document.getElementById('status-busca');
   const status2 = document.getElementById('status-busca2');
   btns.forEach(b => b.disabled = true);
-  [status1, status2].forEach(s => { s.className = ''; s.textContent = 'Buscando notas novas...'; });
+  [status1, status2].forEach(s => { s.className = 'status-busca-texto'; s.textContent = 'Buscando notas novas...'; });
   mostrarCarregando('Buscando notas novas na SEFAZ... pode levar um tempinho, não feche o programa.');
 
   const resultado = await window.buscarAgora();
@@ -716,7 +753,7 @@ async function clicarBuscarAgora() {
   esconderCarregando();
 
   const texto = r.ok ? 'Atualizado.' : (r.erros || ['Erro ao buscar.']).join(' | ');
-  const classe = r.ok ? 'ok' : 'erro';
+  const classe = 'status-busca-texto ' + (r.ok ? 'ok' : 'erro');
   [status1, status2].forEach(s => { s.className = classe; s.textContent = texto; });
   btns.forEach(b => b.disabled = false);
 }
@@ -844,7 +881,11 @@ function renderizarFaltando() {
       else faltandoSelecionadas.delete(f.caminho);
     };
     esquerda.appendChild(chk);
-    esquerda.appendChild(document.createTextNode(`${formatarData(f.data)} — ${f.tipo} — ${f.fornecedor} nº ${f.numero}`));
+    // mostra o NOME DE ARQUIVO real (o mesmo padrão que organizer.FileName
+    // já usa: FORNECEDOR_DATA_TIPO NUMERO_R$ VALOR.xml) em vez de um texto
+    // formatado à parte — assim o que aparece na tela é exatamente o que
+    // vai dentro do ZIP, sem risco de duas versões divergentes.
+    esquerda.appendChild(document.createTextNode(nomeBase(f.caminho)));
 
     const valorSpan = document.createElement('span');
     valorSpan.className = 'valor2';
