@@ -15,24 +15,31 @@ import (
 type Tipo string
 
 const (
-	TipoNFEC  Tipo = "NFEC"  // NFe de compra
-	TipoNFES  Tipo = "NFES"  // NFSe de serviço recebida
-	TipoCUPOM Tipo = "CUPOM" // NFCe (cupom fiscal eletrônico)
-	TipoFAT   Tipo = "FAT"   // Fatura (sem XML, vem de e-mail)
+	TipoNFEC        Tipo = "NFEC"         // NFe de compra (entrada)
+	TipoNFES        Tipo = "NFES"         // NFSe de serviço recebida (entrada)
+	TipoNFESEmitida Tipo = "NFES-EMITIDA" // NFSe de serviço emitida (saída)
+	TipoCUPOM       Tipo = "CUPOM"        // NFCe (cupom fiscal eletrônico)
+	TipoFAT         Tipo = "FAT"          // Fatura (sem XML, vem de e-mail)
+
+	// Reservados — pasta/convenção já prevista (ver internal/verificacao),
+	// mas sem coleta automática pra esses tipos ainda.
+	TipoNFER Tipo = "NFER" // NFe de remessa, entrada
+	TipoNFSR Tipo = "NFSR" // NFe de remessa, saída
 )
 
 // Document é o resultado padronizado depois de extrair um XML — é o que o
 // resto do pipeline (renomeio, organização de pasta) consome, independente
 // de ter vindo de NFe, NFCe ou NFSe.
 type Document struct {
-	Tipo       Tipo
-	Fornecedor string
-	Data       time.Time
-	Numero     string
-	Valor      float64
-	OP         string // vazio por enquanto — fase 2 do projeto (vínculo ERP)
-	Status     string // vazio = normal; "CANCELADO" quando um evento referencia essa nota
-	Chave      string // chave de acesso — usada pra casar evento de cancelamento com a nota
+	Tipo          Tipo
+	Fornecedor    string
+	FornecedorDoc string // CNPJ (ou CPF) do fornecedor, só dígitos — formatação fica na exibição
+	Data          time.Time
+	Numero        string
+	Valor         float64
+	OP            string // vazio por enquanto — fase 2 do projeto (vínculo ERP)
+	Status        string // vazio = normal; "CANCELADO" quando um evento referencia essa nota
+	Chave         string // chave de acesso — usada pra casar evento de cancelamento com a nota
 }
 
 // --- NFe / NFCe (mesmo schema oficial; mod=55 é NFe, mod=65 é NFCe) ---
@@ -48,6 +55,8 @@ type nfeProc struct {
 				DhEmi string `xml:"dhEmi"` // data/hora de emissão, RFC3339
 			} `xml:"ide"`
 			Emit struct {
+				CNPJ  string `xml:"CNPJ"`  // CNPJ do fornecedor
+				CPF   string `xml:"CPF"`   // emitente pessoa física usa CPF em vez de CNPJ
 				XNome string `xml:"xNome"` // razão social do fornecedor
 			} `xml:"emit"`
 			Total struct {
@@ -89,13 +98,19 @@ func ParseNFe(raw []byte) (Document, error) {
 
 	chave := strings.TrimPrefix(inf.Id, "NFe")
 
+	doc := inf.Emit.CNPJ
+	if doc == "" {
+		doc = inf.Emit.CPF // emitente pessoa física
+	}
+
 	return Document{
-		Tipo:       tipo,
-		Fornecedor: inf.Emit.XNome,
-		Data:       dt,
-		Numero:     inf.Ide.NNF,
-		Valor:      valor,
-		Chave:      chave,
+		Tipo:          tipo,
+		Fornecedor:    inf.Emit.XNome,
+		FornecedorDoc: doc,
+		Data:          dt,
+		Numero:        inf.Ide.NNF,
+		Valor:         valor,
+		Chave:         chave,
 	}, nil
 }
 
@@ -182,11 +197,12 @@ func ParseNFSeNacional(raw []byte, meuCNPJ string) (Document, Direcao, error) {
 	}
 
 	return Document{
-		Tipo:       TipoNFES,
-		Fornecedor: inf.Emit.XNome, // prestador — quem emitiu a nota
-		Data:       dt,
-		Numero:     inf.NNFSe,
-		Valor:      valor,
+		Tipo:          TipoNFES,
+		Fornecedor:    inf.Emit.XNome, // prestador — quem emitiu a nota
+		FornecedorDoc: inf.Emit.CNPJ,
+		Data:          dt,
+		Numero:        inf.NNFSe,
+		Valor:         valor,
 	}, direcao, nil
 }
 

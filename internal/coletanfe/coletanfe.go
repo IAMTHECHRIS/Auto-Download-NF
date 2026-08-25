@@ -23,11 +23,29 @@ import (
 	"io-nf-automation/internal/organizer"
 )
 
-// MaxPaginas — cautela deliberada: não varrer tudo numa tacada só.
-const MaxPaginas = 3
+// MaxPaginas é só uma trava de segurança pra nunca rodar pra sempre — o
+// loop já para sozinho assim que a SEFAZ diz "nada novo" (cStat=137) ou a
+// página vem vazia, então na prática ele varre TUDO que tiver disponível
+// numa rodada só, sem precisar de clique manual repetido. Regra oficial da
+// SEFAZ: enquanto cStat=138 (achou), pode pedir a próxima na hora; só
+// cStat=137 exige esperar. Era 3 antes (cautela de quando esse
+// comportamento ainda não tinha sido validado contra a API real,
+// 2026-08-23) — 3 é baixo demais pra dar conta de um backlog real na
+// primeira coleta.
+const MaxPaginas = 50
 
 // geradorDANFE aparece no rodapé do PDF ("Gerado por ...").
 const geradorDANFE = "I.O NF Automation"
+
+// docEmitente pega o CNPJ/CPF do emitente do próprio resNFe; se por algum
+// motivo o campo não vier, cai pro CNPJ embutido na chave de acesso (que
+// sempre existe, é parte do layout dos 44 dígitos).
+func docEmitente(xmlBytes []byte, chave string) string {
+	if doc := nfedist.DocDoResNFe(xmlBytes); doc != "" {
+		return doc
+	}
+	return nfedist.CNPJDaChave(chave)
+}
 
 // gerarDANFEAoLado tenta montar o DANFE em PDF a partir do MESMO xmlBytes já
 // gravado, salvando ao lado do XML (mesmo nome-base, extensão .pdf). Só
@@ -52,7 +70,7 @@ func gerarDANFEAoLado(caminhoXML string, xmlBytes []byte) {
 // aquele, sem mexer no checkpoint/NSU da varredura diária. Grava o
 // documento e registra no catálogo do mesmo jeito que a coleta normal.
 func BuscarUma(cfg appconfig.Config, chave string) (document.Document, string, error) {
-	outDir := filepath.Join(cfg.PastaSaida, "nfe-compras")
+	outDir := filepath.Join(cfg.PastaSaida, "NFE", "NFE_COMPRAS")
 
 	client, err := nfedist.NewClient(cfg.CertificadoPfx, cfg.CertificadoSenha)
 	if err != nil {
@@ -84,12 +102,13 @@ func BuscarUma(cfg appconfig.Config, chave string) (document.Document, string, e
 			return document.Document{}, "", fmt.Errorf("parsear resNFe: %w", err)
 		}
 		doc = document.Document{
-			Tipo:       document.TipoNFEC,
-			Fornecedor: fornecedor,
-			Data:       data,
-			Numero:     nfedist.NumeroDaChave(chaveResp),
-			Valor:      valor,
-			Chave:      chaveResp,
+			Tipo:          document.TipoNFEC,
+			Fornecedor:    fornecedor,
+			FornecedorDoc: docEmitente(xmlBytes, chaveResp),
+			Data:          data,
+			Numero:        nfedist.NumeroDaChave(chaveResp),
+			Valor:         valor,
+			Chave:         chaveResp,
 		}
 		if cancelada {
 			doc.Status = "CANCELADO"
@@ -103,7 +122,7 @@ func BuscarUma(cfg appconfig.Config, chave string) (document.Document, string, e
 		return document.Document{}, "", fmt.Errorf("essa chave não é de uma NFe (schema retornado: %s) — pode ser um evento de cancelamento", docZip.Schema)
 	}
 
-	caminho, err := organizer.PlaceDocument(outDir, doc, ".xml", xmlBytes)
+	caminho, err := organizer.PlaceDocumentPlano(outDir, doc, ".xml", xmlBytes)
 	if err != nil {
 		return document.Document{}, "", fmt.Errorf("gravar arquivo: %w", err)
 	}
@@ -117,22 +136,64 @@ func BuscarUma(cfg appconfig.Config, chave string) (document.Document, string, e
 	return doc, caminho, nil
 }
 
-func Run(cfg appconfig.Config) error {
-	outDir := filepath.Join(cfg.PastaSaida, "nfe-compras")
+// Resumo é o resultado estruturado de uma rodada de Run() — existe pro
+// painel conseguir mostrar um diagnóstico de verdade ("0 notas novas
+// porque já está em dia" vs "0 notas novas porque parou no meio do
+// caminho, ainda tem mais NSU pra varrer") em vez de um "Atualizado."
+// genérico que esconde os dois casos por trás do mesmo texto.
+type Resumo struct {
+	Paginas       int
+	Novas         int
+	Cancelamentos int
+	SemReferencia int
+	OutrosSchemas int
+	Erros         int
+	NSU           int    // checkpoint depois desta rodada
+	UltNSU        string // último "ultNSU" que a SEFAZ informou
+	MaxNSU        string // último "maxNSU" que a SEFAZ informou — se UltNSU != MaxNSU, ainda tem mais
+
+	// Preenchidos quando a ÚLTIMA página veio rejeitada (cStat != 137/138)
+	// — antes isso só ia pro log.Printf, que em build windowsgui não vai
+	// pra lugar nenhum visível. Agora fica no retorno pro painel conseguir
+	// mostrar o motivo de verdade.
+	CStat   string
+	XMotivo string
+
+	// AutoCorrigido: quando uma rejeição revela o NSU certo pra continuar
+	// (comportamento documentado desse webservice — reiniciar do NSU
+	// errado é rejeitado, mas a própria resposta de rejeição informa o
+	// ultNSU correto), o programa semeia o checkpoint sozinho com esse
+	// valor e tenta de novo na mesma rodada, uma vez só, em vez de só
+	// desistir. Fica registrado aqui pra aparecer no diagnóstico.
+	AutoCorrigido    bool
+	NSUAutoCorrigido int
+}
+
+// EmDia diz se a rodada varreu até o fim (NSU alcançou o máximo que a SEFAZ
+// tinha disponível) — quando falso, "0 notas novas" pode só significar que
+// as MaxPaginas desta rodada acabaram antes de chegar em algo novo, não que
+// não existe nada novo.
+func (r Resumo) EmDia() bool {
+	return r.UltNSU != "" && r.UltNSU == r.MaxNSU
+}
+
+func Run(cfg appconfig.Config) (Resumo, error) {
+	var resumo Resumo
+	outDir := filepath.Join(cfg.PastaSaida, "NFE", "NFE_COMPRAS")
 	pastaControle := appconfig.PastaControle(cfg.PastaSaida)
 	if err := os.MkdirAll(pastaControle, 0o755); err != nil {
-		return fmt.Errorf("criar pasta _Controle: %w", err)
+		return resumo, fmt.Errorf("criar pasta _Controle: %w", err)
 	}
 	checkpointPath := filepath.Join(pastaControle, ".checkpoint-nfedist-nsu")
 
 	client, err := nfedist.NewClient(cfg.CertificadoPfx, cfg.CertificadoSenha)
 	if err != nil {
-		return fmt.Errorf("criar client: %w", err)
+		return resumo, fmt.Errorf("criar client: %w", err)
 	}
 
 	nsu, err := nfedist.LerCheckpoint(checkpointPath)
 	if err != nil {
-		return fmt.Errorf("ler checkpoint: %w", err)
+		return resumo, fmt.Errorf("ler checkpoint: %w", err)
 	}
 	fmt.Printf("[NFe] Retomando a partir do NSU %d\n", nsu)
 
@@ -144,17 +205,68 @@ func Run(cfg appconfig.Config) error {
 	}
 	processadas := make(map[string]registro)
 
+	// Pré-carrega o que o catálogo já tem de rodadas anteriores — sem isso
+	// dois problemas: 1) reprocessar o mesmo NSU (ex: rodada que foi
+	// interrompida e recomeçou) grava a MESMA nota de novo, colidindo com o
+	// arquivo já existente e criando uma cópia com sufixo "_chave-XXXXXX"
+	// (bug real reportado — arquivo duplicado); 2) um evento de
+	// cancelamento pra uma nota de uma rodada ANTERIOR não achava a nota
+	// original (só olhava as processadas NESTA rodada) e caía no caminho de
+	// "sem referência", perdendo a marcação de CANCELADO na nota certa.
+	if existentes, err := catalogo.Listar(cfg.PastaSaida); err != nil {
+		log.Printf("[NFe] aviso: não consegui pré-carregar o catálogo (seguindo sem isso): %v", err)
+	} else {
+		for _, ex := range existentes {
+			if ex.Chave == "" || ex.Caminho == "" {
+				continue
+			}
+			if _, statErr := os.Stat(ex.Caminho); statErr != nil {
+				continue // arquivo não existe mais no disco, não conta como "já processado"
+			}
+			processadas[ex.Chave] = registro{
+				caminho: ex.Caminho,
+				doc: document.Document{
+					Tipo: document.Tipo(ex.Tipo), Fornecedor: ex.Fornecedor,
+					FornecedorDoc: ex.FornecedorDoc, Data: ex.Data, Numero: ex.Numero,
+					Valor: ex.Valor, Status: ex.Status, Chave: ex.Chave,
+				},
+			}
+		}
+	}
+
 	for pagina := 0; pagina < MaxPaginas; pagina++ {
 		res, err := client.BuscarLote(cfg.CUFAutor, cfg.CNPJ, nsu)
 		if err != nil {
 			log.Printf("[NFe] buscar lote NSU=%d: %v — parando", nsu, err)
 			break
 		}
+		resumo.Paginas++
+		resumo.UltNSU = res.UltNSU
+		resumo.MaxNSU = res.MaxNSU
+		resumo.CStat = res.CStat
+		resumo.XMotivo = res.XMotivo
 
 		fmt.Printf("[NFe] Página %d — cStat=%s (%s) — %d documentos — ultNSU=%s maxNSU=%s\n",
 			pagina+1, res.CStat, res.XMotivo, len(res.Docs), res.UltNSU, res.MaxNSU)
 
 		if res.CStat != "138" && res.CStat != "137" {
+			// auto-recuperação: se a rejeição revelou um NSU maior que o
+			// nosso (comportamento documentado — reinício errado devolve o
+			// NSU certo no próprio ultNSU), semeia o checkpoint com isso e
+			// tenta UMA vez de novo antes de desistir. Só uma tentativa —
+			// não vira loop se a SEFAZ continuar rejeitando por outro motivo.
+			if !resumo.AutoCorrigido {
+				if nsuRevelado, convErr := strconv.Atoi(res.UltNSU); convErr == nil && nsuRevelado > nsu {
+					log.Printf("[NFe] rejeitado (cStat=%s: %s) — SEFAZ revelou NSU %d, semeando checkpoint e tentando de novo", res.CStat, res.XMotivo, nsuRevelado)
+					nsu = nsuRevelado
+					if err := nfedist.SalvarCheckpoint(checkpointPath, nsu); err != nil {
+						log.Printf("[NFe] erro ao salvar checkpoint corrigido: %v", err)
+					}
+					resumo.AutoCorrigido = true
+					resumo.NSUAutoCorrigido = nsu
+					continue
+				}
+			}
 			log.Printf("[NFe] cStat inesperado, parando por segurança: %s — %s", res.CStat, res.XMotivo)
 			break
 		}
@@ -176,17 +288,24 @@ func Run(cfg appconfig.Config) error {
 					continue
 				}
 				doc := document.Document{
-					Tipo:       document.TipoNFEC,
-					Fornecedor: fornecedor,
-					Data:       data,
-					Numero:     nfedist.NumeroDaChave(chave),
-					Valor:      valor,
-					Chave:      chave,
+					Tipo:          document.TipoNFEC,
+					Fornecedor:    fornecedor,
+					FornecedorDoc: docEmitente(xmlBytes, chave),
+					Data:          data,
+					Numero:        nfedist.NumeroDaChave(chave),
+					Valor:         valor,
+					Chave:         chave,
 				}
 				if cancelada {
 					doc.Status = "CANCELADO"
 				}
-				caminho, err := organizer.PlaceDocument(outDir, doc, ".xml", xmlBytes)
+				if reg, ja := processadas[doc.Chave]; ja && reg.doc.Status == doc.Status {
+					// mesma nota, mesmo status, já gravada antes (rodada
+					// anterior ou reprocessamento do mesmo NSU) — não duplica.
+					fmt.Printf("[NFe]   NSU %s [resNFe] já existe (%s) -> pulando\n", docZip.NSU, reg.caminho)
+					continue
+				}
+				caminho, err := organizer.PlaceDocumentPlano(outDir, doc, ".xml", xmlBytes)
 				if err != nil {
 					log.Printf("[NFe]   NSU %s: erro ao gravar: %v", docZip.NSU, err)
 					erros++
@@ -206,7 +325,11 @@ func Run(cfg appconfig.Config) error {
 					erros++
 					continue
 				}
-				caminho, err := organizer.PlaceDocument(outDir, doc, ".xml", xmlBytes)
+				if reg, ja := processadas[doc.Chave]; ja && reg.doc.Status == doc.Status {
+					fmt.Printf("[NFe]   NSU %s [procNFe] já existe (%s) -> pulando\n", docZip.NSU, reg.caminho)
+					continue
+				}
+				caminho, err := organizer.PlaceDocumentPlano(outDir, doc, ".xml", xmlBytes)
 				if err != nil {
 					log.Printf("[NFe]   NSU %s: erro ao gravar: %v", docZip.NSU, err)
 					erros++
@@ -275,9 +398,16 @@ func Run(cfg appconfig.Config) error {
 		}
 	}
 
+	resumo.Novas = resumos
+	resumo.Cancelamentos = cancelamentos
+	resumo.SemReferencia = semReferencia
+	resumo.OutrosSchemas = outrosSchemas
+	resumo.Erros = erros
+	resumo.NSU = nsu
+
 	fmt.Println("[NFe] === Resumo ===")
 	fmt.Printf("[NFe] processados=%d cancelados=%d semRef=%d outrosSchemas=%d erros=%d checkpoint=%d\n",
 		resumos, cancelamentos, semReferencia, outrosSchemas, erros, nsu)
 
-	return nil
+	return resumo, nil
 }

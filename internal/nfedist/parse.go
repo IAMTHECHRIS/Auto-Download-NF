@@ -54,6 +54,30 @@ func ParseResNFe(raw []byte) (fornecedor string, data time.Time, valor float64, 
 	return r.XNome, data, valor, r.ChNFe, cancelada, nil
 }
 
+// DocDoResNFe devolve o CNPJ (ou CPF, se emitente pessoa física) do
+// emitente. Separado de ParseResNFe pra não crescer ainda mais aquela lista
+// de retornos posicionais.
+func DocDoResNFe(raw []byte) string {
+	var r resNFe
+	if err := xml.Unmarshal(raw, &r); err != nil {
+		return ""
+	}
+	if r.CNPJ != "" {
+		return r.CNPJ
+	}
+	return r.CPF
+}
+
+// CNPJDaChave extrai o CNPJ do emitente direto da chave de acesso — último
+// recurso pra quando o XML não trouxe o campo. Layout oficial da chave:
+// UF(2) AAMM(4) CNPJ(14) mod(2) serie(3) nNF(9) tpEmis(1) cNF(8) cDV(1).
+func CNPJDaChave(chave string) string {
+	if len(chave) != 44 {
+		return ""
+	}
+	return chave[6:20]
+}
+
 // NumeroDaChave extrai o número da nota a partir da chave de acesso (44
 // dígitos) — o resNFe não traz o número separado. Layout oficial da chave:
 // UF(2) AAMM(4) CNPJ(14) mod(2) serie(3) nNF(9) tpEmis(1) cNF(8) cDV(1).

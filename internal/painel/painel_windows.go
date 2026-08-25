@@ -99,18 +99,47 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 	w.Bind("buscarAgora", func() string {
 		debugLog.Printf(">> buscarAgora")
 		var erros []string
-		if err := coletanfe.Run(cfg); err != nil {
+
+		resumoNFe, err := coletanfe.Run(cfg)
+		if err != nil {
 			erros = append(erros, "NFe: "+err.Error())
 		}
-		if err := coletansfe.Run(cfg); err != nil {
+		resumoNFSe, err := coletansfe.Run(cfg)
+		if err != nil {
 			erros = append(erros, "NFSe: "+err.Error())
 		}
-		debugLog.Printf("<< buscarAgora erros=%v", erros)
-		if len(erros) > 0 {
-			b, _ := json.Marshal(map[string]any{"ok": false, "erros": erros})
-			return string(b)
+		debugLog.Printf("<< buscarAgora nfe=%+v nfse=%+v erros=%v", resumoNFe, resumoNFSe, erros)
+
+		// diagnóstico: "0 notas novas" pode significar duas coisas bem
+		// diferentes — já está em dia (bom sinal) ou parou no meio do
+		// caminho antes de achar algo novo (MaxPaginas acabou). Sem
+		// distinguir isso o usuário fica sem saber se precisa só clicar
+		// "Buscar" de novo pra continuar de onde parou.
+		var diagnostico string
+		switch {
+		case resumoNFe.CStat != "" && resumoNFe.CStat != "137" && resumoNFe.CStat != "138" && !resumoNFe.AutoCorrigido:
+			// rejeitado de verdade e não deu pra auto-corrigir — motivo
+			// real da SEFAZ, não escondido atrás de "sem notas novas".
+			diagnostico = fmt.Sprintf("⚠ NFEC/CT-e: a SEFAZ RECUSOU o pedido (cStat=%s: %s) — não é \"sem notas novas\", é rejeição de verdade. NÃO fique clicando \"Buscar\" repetidamente — se for bloqueio por reinício de NSU, pode levar até 1h pra liberar sozinho.", resumoNFe.CStat, resumoNFe.XMotivo)
+		case resumoNFe.AutoCorrigido:
+			diagnostico = fmt.Sprintf("NFEC/CT-e: o checkpoint local estava desatualizado — a SEFAZ recusou (cStat=%s: %s), mas revelou o NSU certo (%d) e o programa já se auto-corrigiu e retomou dali.", resumoNFe.CStat, resumoNFe.XMotivo, resumoNFe.NSUAutoCorrigido)
+			if resumoNFe.Novas == 0 && !resumoNFe.EmDia() {
+				diagnostico += " Ainda tem mais pra varrer — clique em \"Buscar notas agora\" de novo."
+			}
+		case resumoNFe.Novas == 0 && resumoNFe.EmDia():
+			diagnostico = "NFEC/CT-e: sem notas novas — já está em dia com a SEFAZ."
+		case resumoNFe.Novas == 0 && resumoNFe.Paginas > 0:
+			diagnostico = fmt.Sprintf("NFEC/CT-e: sem notas novas nesta rodada, mas ainda tem mais pra varrer (parou no NSU %s de %s após %d página(s)) — clique em \"Buscar notas agora\" de novo pra continuar.", resumoNFe.UltNSU, resumoNFe.MaxNSU, resumoNFe.Paginas)
 		}
-		return `{"ok":true}`
+		if resumoNFSe.ParouPorLimitePaginas {
+			if diagnostico != "" {
+				diagnostico += " "
+			}
+			diagnostico += fmt.Sprintf("NFS-e: rodada terminou no limite de %d página(s) sem esvaziar — pode ter mais, busque de novo.", coletansfe.MaxPaginas)
+		}
+
+		b, _ := json.Marshal(map[string]any{"ok": len(erros) == 0, "erros": erros, "diagnostico": diagnostico})
+		return string(b)
 	})
 
 	w.Bind("buscarPorChave", func(chave string) string {
@@ -159,13 +188,13 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 	// diferentes, não só uma fixa.
 	w.Bind("verificarCopia", func(pastaDestino string) string {
 		debugLog.Printf(">> verificarCopia pastaDestino=%s", pastaDestino)
-		faltando, err := verificacao.Verificar(cfg.PastaSaida, pastaDestino)
-		debugLog.Printf("<< verificarCopia faltando=%d err=%v", len(faltando), err)
+		r, err := verificacao.Verificar(cfg.PastaSaida, pastaDestino)
+		debugLog.Printf("<< verificarCopia escopo=%+v totalNoEscopo=%d faltando=%d err=%v", r.Escopo, r.TotalNoEscopo, len(r.Faltando), err)
 		if err != nil {
 			b, _ := json.Marshal(map[string]any{"ok": false, "erro": err.Error()})
 			return string(b)
 		}
-		b, _ := json.Marshal(map[string]any{"ok": true, "faltando": faltando})
+		b, _ := json.Marshal(map[string]any{"ok": true, "faltando": r.Faltando, "escopo": r.Escopo, "total_no_escopo": r.TotalNoEscopo})
 		return string(b)
 	})
 
@@ -322,8 +351,12 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 
 	w.Bind("abrirPasta", func(caminho string) {
 		// /select, marca o arquivo dentro do Explorer, já mostrando a
-		// pasta certa — sem precisar navegar manualmente.
-		exec.Command("explorer", "/select,"+caminho).Start()
+		// pasta certa — sem precisar navegar manualmente. SEM aspas em
+		// volta do caminho, o explorer.exe erra o parse assim que o nome
+		// do arquivo tem vírgula ou espaço (ex: "R$ 223.136,71" no nome
+		// padrão de arquivo) e abre a pasta padrão (Documentos) em vez do
+		// caminho certo — bug real reportado, corrigido aqui.
+		exec.Command("explorer", `/select,"`+caminho+`"`).Start()
 	})
 
 	w.Bind("escolherArquivo", func() string {
@@ -417,10 +450,35 @@ if ($pasta -ne $null) {
 // tempo pro processo atual fechar e soltar o arquivo do .exe — e só então
 // apaga a pasta inteira, incluindo o próprio executável.
 func agendarAutoLimpeza(pastaControle string) error {
+	// Antes era uma tentativa ÚNICA de Remove-Item com
+	// -ErrorAction SilentlyContinue, que ENGOLE qualquer falha sem avisar
+	// nada — se o .exe atual não tivesse soltado o arquivo a tempo (comum:
+	// antivírus/Defender escaneando o .exe recém-rodado, ou o processo
+	// ainda fechando), a limpeza simplesmente não acontecia e ninguém
+	// sabia por quê (bug reportado: "continua tudo aqui" depois de
+	// desinstalar). Agora tenta várias vezes ao longo de ~20s, e se mesmo
+	// assim falhar, deixa um log FORA da pasta que estava tentando apagar
+	// (senão o próprio log de erro não sobrevive pra explicar o erro).
+	logErro := filepath.Join(os.TempDir(), "io-nf-automation-desinstalar-erro.log")
 	script := fmt.Sprintf(`
-Start-Sleep -Seconds 3
-Remove-Item -LiteralPath %s -Recurse -Force -ErrorAction SilentlyContinue
-`, aspasPS(pastaControle))
+$ErrorActionPreference = 'Stop'
+$pasta = %s
+$logErro = %s
+$sucesso = $false
+for ($i = 0; $i -lt 18; $i++) {
+    Start-Sleep -Seconds 1
+    try {
+        Remove-Item -LiteralPath $pasta -Recurse -Force
+        $sucesso = $true
+        break
+    } catch {
+        $ultimoErro = $_.Exception.Message
+    }
+}
+if (-not $sucesso) {
+    "$(Get-Date -Format o) — falha ao apagar '$pasta' apos 18 tentativas: $ultimoErro" | Out-File -FilePath $logErro -Append -Encoding utf8
+}
+`, aspasPS(pastaControle), aspasPS(logErro))
 
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script)
 	const createNoWindow = 0x08000000

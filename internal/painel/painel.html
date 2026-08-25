@@ -148,11 +148,17 @@
   .filtro-botoes { display: flex; gap: 8px; margin-top: 12px; }
   .filtro-botoes button { flex: 1; padding: 7px 10px; font-size: 12px; }
 
-  tbody td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  tbody td { padding: 9px 8px; border-bottom: 1px solid var(--border); vertical-align: middle; -webkit-user-select: text; user-select: text; }
   tbody tr:hover { background: rgba(255,255,255,0.02); }
   .tag { display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 11px; font-weight: 600; background: #232b45; color: var(--muted); }
   .tag.cancelado { background: rgba(255,107,107,0.15); color: var(--erro); }
   .valor { text-align: right; white-space: nowrap; }
+  /* chave de acesso tem 44 dígitos — monoespaçada e menor pra caber sem
+     esticar a tabela; o title do span mostra ela inteira no hover. */
+  .chave-acesso {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 10.5px; color: var(--muted); letter-spacing: -0.2px;
+  }
   .vazio { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 13px; }
   footer { padding: 10px 24px; border-top: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
   footer span { font-size: 12px; color: var(--muted); }
@@ -277,7 +283,13 @@
       </p>
       <div class="campo">
         <label>Chave de acesso (44 dígitos)</label>
-        <input type="text" id="chaveInput" maxlength="44" placeholder="00000000000000000000000000000000000000000000" inputmode="numeric">
+        <!-- maxlength era 44 (CARACTERES) — a chave formatada com espaço a
+             cada 4 dígitos (a que aparece na tela pra copiar) tem 44
+             dígitos + 10 espaços = 54 caracteres, então colar ela cortava
+             os últimos dígitos antes mesmo de validar (bug reportado).
+             60 dá folga de sobra pra qualquer separador (espaço, ponto,
+             traço) que venha junto ao colar. -->
+        <input type="text" id="chaveInput" maxlength="60" placeholder="00000000000000000000000000000000000000000000" inputmode="numeric">
       </div>
       <button class="btn-principal" id="btnBuscarChave" onclick="clicarBuscarPorChave()">Buscar essa nota</button>
       <div class="status-form" id="status-chave"></div>
@@ -298,12 +310,17 @@
     </div>
   </section>
 
-  <!-- ABA: Verificar cópia -->
+  <!-- ABA: Verificar cópia — mesmo layout de tabela (filtro/ordenação por
+       coluna) das abas Entrada/Saída, só a coluna de ação que muda (aqui é
+       "selecionar pra ZIP", não baixar XML/PDF). -->
   <section class="aba" id="aba-verificar">
-    <div class="painel-conteudo largo">
+    <div class="painel-conteudo largo" style="padding-bottom: 0;">
       <p class="explicacao">
         Escolha uma pasta (ex: a do Google Drive) e compara com o que já foi
-        baixado — mostra o que ainda não está lá dentro.
+        baixado — mostra o que ainda não está lá dentro. A comparação lê a
+        <b>chave de acesso de dentro dos XMLs</b> que já estão na pasta, não
+        só o nome do arquivo — funciona mesmo se os arquivos lá tiverem sido
+        renomeados por outra pessoa/sistema.
       </p>
       <div class="campo">
         <label>Pasta a verificar</label>
@@ -314,16 +331,18 @@
       </div>
       <button class="btn-principal" id="btnVerificar" onclick="clicarVerificarCopia()" disabled>Verificar agora</button>
       <div class="status-form" id="status-verificar"></div>
-
-      <div class="barra" id="verificarFiltros" style="display:none; padding: 14px 0 10px; border-bottom: none;">
-        <input type="text" id="verificarBusca" placeholder="Buscar por fornecedor ou número..." oninput="renderizarFaltando()">
-        <select id="verificarMes" onchange="renderizarFaltando()"><option value="">Todos os meses</option></select>
-        <button class="btn-secundario" onclick="marcarTodosFaltando(true)">Marcar todas</button>
-        <button class="btn-secundario" onclick="marcarTodosFaltando(false)">Desmarcar</button>
-        <button class="btn-principal" onclick="clicarGerarZip()">Gerar ZIP com selecionadas</button>
-      </div>
-      <div id="resultado-verificar"></div>
     </div>
+    <div class="barra" id="verificarFiltros" style="display:none;">
+      <button class="btn-secundario" onclick="marcarTodosFaltando(true)">Marcar todas</button>
+      <button class="btn-secundario" onclick="marcarTodosFaltando(false)">Desmarcar</button>
+      <span style="flex:1"></span>
+      <button class="btn-principal" onclick="clicarGerarZip()">Gerar ZIP com selecionadas</button>
+    </div>
+    <main>
+      <table id="tabela-verificar"></table>
+      <div class="vazio" id="vazio-verificar" style="display:none"></div>
+    </main>
+    <footer><span id="contagem-verificar"></span></footer>
   </section>
 
   <!-- ABA: Configuração -->
@@ -420,40 +439,57 @@ function marcarDownload(caminho, tipo, valor) {
 }
 
 function filtrosVazios() {
-  // fornecedor/numero/valor: null = sem filtro (mostra tudo), ou um Set
-  // com os valores marcados no checklist estilo Excel. data: faixa de/até.
-  return { fornecedor: null, numero: null, valor: null, dataDe: '', dataAte: '' };
+  // cnpj/fornecedor/numero/valor: null = sem filtro (mostra tudo), ou um
+  // Set com os valores marcados no checklist estilo Excel. data: faixa de/até.
+  return { cnpj: null, chaveacesso: null, fornecedor: null, numero: null, valor: null, dataDe: '', dataAte: '' };
 }
-const entradaState = { filtros: filtrosVazios(), tipo: 'NFEC', status: '', ordenarPor: 'data', ordemAsc: false };
-const saidaState   = { filtros: filtrosVazios(), tipo: '',     status: '', ordenarPor: 'data', ordemAsc: false };
+const entradaState  = { filtros: filtrosVazios(), tipo: 'NFEC', status: '', ordenarPor: 'data', ordemAsc: false };
+const saidaState    = { filtros: filtrosVazios(), tipo: '',     status: '', ordenarPor: 'data', ordemAsc: false };
+const verificarState = { filtros: filtrosVazios(), tipo: '',    status: '', ordenarPor: 'data', ordemAsc: false };
 
 // Cada coluna tem UMA seta só (estilo Excel de verdade) — clicar nela abre
 // um menu único que junta ordenar (A→Z / Z→A) E filtrar. Clicar no NOME
 // da coluna não faz nada — só a seta decide.
 // tipoFiltro: 'checklist' (lista de valores com busca), 'faixa-data'
 // (de/até), ou 'nenhum' (só ordena, sem filtro).
+// align: como a coluna alinha — precisa ser o MESMO no cabeçalho e na
+// célula, senão o título fica solto do conteúdo (bug reportado: Valor
+// alinhava à direita no corpo mas à esquerda no título).
 const COLUNAS = [
-  { chave: 'data', rotulo: 'Data', tipoFiltro: 'faixa-data' },
-  { chave: 'tipo', rotulo: 'Tipo', tipoFiltro: 'nenhum' },
-  { chave: 'fornecedor', rotulo: 'Fornecedor', tipoFiltro: 'checklist' },
-  { chave: 'numero', rotulo: 'Número', tipoFiltro: 'checklist' },
-  { chave: 'valor', rotulo: 'Valor', tipoFiltro: 'checklist' },
-  { chave: 'status', rotulo: 'Status', tipoFiltro: 'nenhum' },
-  { chave: '', rotulo: '', tipoFiltro: 'nenhum' },
+  { chave: 'data', rotulo: 'Data', tipoFiltro: 'faixa-data', align: 'left' },
+  { chave: 'tipo', rotulo: 'Tipo', tipoFiltro: 'nenhum', align: 'left' },
+  { chave: 'fornecedor', rotulo: 'Fornecedor', tipoFiltro: 'checklist', align: 'left' },
+  // CNPJ/CPF em coluna própria: pra NFe vem do campo emit.CNPJ do XML; pra
+  // NFS-e de prestador pessoa física a SEFAZ devolve o CPF parcial GRUDADO
+  // no nome (ex: "62.108.173 MARCIA DOS SANTOS") e catalogo.Listar separa.
+  { chave: 'cnpj', rotulo: 'CNPJ/CPF', tipoFiltro: 'checklist', align: 'left' },
+  { chave: 'numero', rotulo: 'Número', tipoFiltro: 'checklist', align: 'right' },
+  { chave: 'valor', rotulo: 'Valor', tipoFiltro: 'checklist', align: 'right' },
+  { chave: 'status', rotulo: 'Status', tipoFiltro: 'nenhum', align: 'center' },
+  { chave: 'chaveacesso', rotulo: 'Chave de acesso', tipoFiltro: 'checklist', align: 'left' },
+  { chave: '', rotulo: '', tipoFiltro: 'nenhum', align: 'right' },
 ];
 
 // Base (Entrada ou Saída, já filtrada pela sub-aba de tipo) usada tanto
 // pra montar a tabela quanto pra listar os valores únicos de um filtro.
 function baseParaEstado(estado) {
+  if (estado === verificarState) return ultimoFaltando;
   return (estado === saidaState)
     ? todasEntradas.filter(e => e.tipo === 'NFES-EMITIDA')
     : todasEntradas.filter(e => e.tipo !== 'NFES-EMITIDA' && (!estado.tipo || e.tipo === estado.tipo));
 }
 
-// Entrada não mostra a coluna Tipo — já está implícito na sub-aba
-// (NFEC/NFES) selecionada, mostrar de novo seria redundante.
+// Nenhuma das duas mostra a coluna Tipo: Entrada já tem isso implícito na
+// sub-aba (NFEC/NFES) selecionada, e Saída hoje só existe um tipo possível
+// (NFES-EMITIDA — nota de serviço emitida). Fica na definição de COLUNAS só
+// pro dia que existir NFe de saída/remessa (NFER) rastreada de verdade —
+// nesse dia volta a fazer sentido mostrar de novo só na Saída.
 function colunasPara(estado) {
-  return estado === entradaState ? COLUNAS.filter(c => c.chave !== 'tipo') : COLUNAS;
+  // Verificar cópia pode misturar tipos diferentes (se a pasta escolhida
+  // não bater 100% num tipo só) — ali a coluna Tipo ajuda a entender o que
+  // é o quê. Entrada/Saída não precisam dela (já é óbvio pela aba/sub-aba).
+  if (estado === verificarState) return COLUNAS;
+  return COLUNAS.filter(c => c.chave !== 'tipo');
 }
 
 function mudarAba(nome) {
@@ -476,10 +512,6 @@ function formatarData(iso) {
   const [ano, mes, dia] = iso.substring(0, 10).split('-');
   return `${dia}/${mes}/${ano}`;
 }
-function nomeBase(caminho) {
-  return (caminho || '').split(/[\\/]/).pop();
-}
-
 function abrir(caminho) {
   if (caminho) window.abrirPasta(caminho);
 }
@@ -487,6 +519,8 @@ function abrir(caminho) {
 const CELULAS = {
   data: e => formatarData(e.data),
   tipo: e => `<span class="tag">${e.tipo || ''}</span>`,
+  cnpj: e => e.fornecedor_doc || '',
+  chaveacesso: e => e.chave ? `<span class="chave-acesso" title="${e.chave}">${e.chave}</span>` : '',
   fornecedor: e => e.fornecedor || '',
   numero: e => e.numero || '',
   valor: e => formatarValor(e.valor || 0),
@@ -497,8 +531,7 @@ const CELULAS = {
 };
 
 function renderizarTabela(estado) {
-  const ehSaida = estado === saidaState;
-  const sufixo = ehSaida ? 'saida' : 'entrada';
+  const sufixo = estado === verificarState ? 'verificar' : (estado === saidaState ? 'saida' : 'entrada');
   const colunas = colunasPara(estado);
   const base = baseParaEstado(estado);
 
@@ -507,6 +540,8 @@ function renderizarTabela(estado) {
     if (estado.status === 'CANCELADO' && !(e.status || '').toUpperCase().includes('CANCELADO')) return false;
     if (estado.status === 'normal' && (e.status || '').toUpperCase().includes('CANCELADO')) return false;
 
+    if (f.cnpj && !f.cnpj.has(e.fornecedor_doc || '(vazio)')) return false;
+    if (f.chaveacesso && !f.chaveacesso.has(e.chave || '(vazio)')) return false;
     if (f.fornecedor && !f.fornecedor.has(e.fornecedor || '(vazio)')) return false;
     if (f.numero && !f.numero.has(e.numero || '(vazio)')) return false;
     if (f.valor && !f.valor.has(formatarValor(e.valor || 0))) return false;
@@ -519,7 +554,10 @@ function renderizarTabela(estado) {
   });
 
   filtradas.sort((a, b) => {
-    let x = a[estado.ordenarPor], y = b[estado.ordenarPor];
+    const campo = estado.ordenarPor === 'cnpj' ? 'fornecedor_doc'
+      : estado.ordenarPor === 'chaveacesso' ? 'chave'
+      : estado.ordenarPor;
+    let x = a[campo], y = b[campo];
     if (estado.ordenarPor === 'data') { x = new Date(x); y = new Date(y); }
     if (x < y) return estado.ordemAsc ? -1 : 1;
     if (x > y) return estado.ordemAsc ? 1 : -1;
@@ -532,9 +570,13 @@ function renderizarTabela(estado) {
   if (filtradas.length === 0) {
     tabela.style.display = 'none';
     vazio.style.display = 'block';
-    vazio.textContent = base.length === 0
-      ? 'Nenhuma nota ainda. Clique em "Buscar notas agora".'
-      : 'Nada encontrado com esses filtros.';
+    if (base.length !== 0) {
+      vazio.textContent = 'Nada encontrado com esses filtros.';
+    } else if (estado === verificarState) {
+      vazio.textContent = 'Nenhuma nota faltando — ou verifique uma pasta primeiro.';
+    } else {
+      vazio.textContent = 'Nenhuma nota ainda. Clique em "Buscar notas agora".';
+    }
   } else {
     tabela.style.display = 'table';
     vazio.style.display = 'none';
@@ -568,6 +610,7 @@ function renderizarTabela(estado) {
         };
         th.appendChild(icone);
       }
+      th.style.textAlign = col.align || 'left';
       trh.appendChild(th);
     }
     thead.appendChild(trh);
@@ -577,35 +620,54 @@ function renderizarTabela(estado) {
       const tr = document.createElement('tr');
       for (const col of colunas) {
         const td = document.createElement('td');
+        // mesmo align do cabeçalho (col.align) — não pode divergir
+        td.style.textAlign = col.align || 'left';
         if (col.chave === 'valor') td.className = 'valor';
         if (col.chave) td.innerHTML = CELULAS[col.chave](e);
         tr.appendChild(td);
       }
       const tdAcao = tr.lastElementChild;
 
-      const wrapChk = document.createElement('span');
-      wrapChk.style.cssText = 'display:inline-flex; gap:10px; margin-right:10px;';
-      const mkChk = (tipo, desabilitado) => {
+      if (estado === verificarState) {
+        // aqui a ação é "selecionar pra ZIP", não baixar XML/PDF — reusa o
+        // mesmo Set (faltandoSelecionadas) que já existia.
         const lbl = document.createElement('label');
-        lbl.style.cssText = 'font-size:11px; display:inline-flex; align-items:center; gap:3px; cursor:pointer;' + (desabilitado ? ' opacity:0.35; cursor:default;' : '');
+        lbl.style.cssText = 'font-size:12px; display:inline-flex; align-items:center; gap:5px; cursor:pointer;';
         const chk = document.createElement('input');
         chk.type = 'checkbox';
-        chk.disabled = !!desabilitado;
-        chk.checked = downloadMarcado(e.caminho, tipo);
-        chk.onchange = () => marcarDownload(e.caminho, tipo, chk.checked);
+        chk.checked = faltandoSelecionadas.has(e.caminho);
+        chk.onchange = () => {
+          if (chk.checked) faltandoSelecionadas.add(e.caminho);
+          else faltandoSelecionadas.delete(e.caminho);
+        };
         lbl.appendChild(chk);
-        lbl.appendChild(document.createTextNode(tipo.toUpperCase()));
-        return lbl;
-      };
-      wrapChk.appendChild(mkChk('xml', false));
-      wrapChk.appendChild(mkChk('pdf', !e.tem_pdf));
-      tdAcao.appendChild(wrapChk);
+        lbl.appendChild(document.createTextNode('Selecionar'));
+        tdAcao.appendChild(lbl);
+      } else {
+        const wrapChk = document.createElement('span');
+        wrapChk.style.cssText = 'display:inline-flex; gap:10px; margin-right:10px;';
+        const mkChk = (tipo, desabilitado) => {
+          const lbl = document.createElement('label');
+          lbl.style.cssText = 'font-size:11px; display:inline-flex; align-items:center; gap:3px; cursor:pointer;' + (desabilitado ? ' opacity:0.35; cursor:default;' : '');
+          const chk = document.createElement('input');
+          chk.type = 'checkbox';
+          chk.disabled = !!desabilitado;
+          chk.checked = downloadMarcado(e.caminho, tipo);
+          chk.onchange = () => marcarDownload(e.caminho, tipo, chk.checked);
+          lbl.appendChild(chk);
+          lbl.appendChild(document.createTextNode(tipo.toUpperCase()));
+          return lbl;
+        };
+        wrapChk.appendChild(mkChk('xml', false));
+        wrapChk.appendChild(mkChk('pdf', !e.tem_pdf));
+        tdAcao.appendChild(wrapChk);
 
-      const btn = document.createElement('button');
-      btn.className = 'btn-secundario';
-      btn.textContent = 'Abrir pasta';
-      btn.onclick = () => abrir(e.caminho);
-      tdAcao.appendChild(btn);
+        const btn = document.createElement('button');
+        btn.className = 'btn-secundario';
+        btn.textContent = 'Abrir pasta';
+        btn.onclick = () => abrir(e.caminho);
+        tdAcao.appendChild(btn);
+      }
       tbody.appendChild(tr);
     }
 
@@ -633,7 +695,10 @@ function colunaTemFiltroAtivo(coluna, estado) {
 function valoresUnicos(base, coluna) {
   const set = new Set();
   for (const e of base) {
-    set.add(coluna === 'valor' ? formatarValor(e.valor || 0) : (e[coluna] || '(vazio)'));
+    if (coluna === 'valor') set.add(formatarValor(e.valor || 0));
+    else if (coluna === 'cnpj') set.add(e.fornecedor_doc || '(vazio)');
+    else if (coluna === 'chaveacesso') set.add(e.chave || '(vazio)');
+    else set.add(e[coluna] || '(vazio)');
   }
   return Array.from(set).sort((a, b) => a.localeCompare(b, 'pt-BR'));
 }
@@ -808,9 +873,13 @@ async function clicarBuscarAgora() {
   await carregarCatalogo();
   esconderCarregando();
 
-  const texto = r.ok ? 'Atualizado.' : (r.erros || ['Erro ao buscar.']).join(' | ');
-  const classe = 'status-busca-texto ' + (r.ok ? 'ok' : 'erro');
-  [status1, status2].forEach(s => { s.className = classe; s.textContent = texto; });
+  // "Atualizado." sozinho esconde a diferença entre "sem nota nova porque
+  // já está em dia" e "sem nota nova porque a rodada parou no meio do
+  // caminho" — o diagnóstico (quando existe) deixa isso explícito.
+  let texto = r.ok ? 'Atualizado.' : (r.erros || ['Erro ao buscar.']).join(' | ');
+  if (r.diagnostico) texto += ' ' + r.diagnostico;
+  const classe = 'status-busca-texto ' + (r.ok ? (r.diagnostico ? '' : 'ok') : 'erro');
+  [status1, status2].forEach(s => { s.className = classe; s.textContent = texto; s.title = texto; });
   btns.forEach(b => b.disabled = false);
 }
 
@@ -933,9 +1002,27 @@ async function clicarEscolherPastaVerificar() {
   document.getElementById('btnVerificar').disabled = false;
 }
 
+const MESES_PT = ['', 'jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+
+function descreverEscopo(escopo) {
+  if (!escopo) return '';
+  const partes = [];
+  if (escopo.tem_periodo) partes.push(MESES_PT[escopo.mes] + '/' + escopo.ano);
+  if (escopo.direcao) partes.push(escopo.direcao === 'entrada' ? 'Entrada' : 'Saída');
+  if (escopo.tipo) partes.push(escopo.tipo);
+  return partes.length ? 'comparado só com ' + partes.join(', ') : '';
+}
+
+// Se não reconheceu NADA no caminho (nem mês, nem direção, nem tipo), a
+// comparação caiu pro catálogo INTEIRO — precisa avisar em vez de deixar o
+// usuário achar que filtrou por engano. Ver internal/verificacao.Inferir
+// pro padrão de pasta esperado.
+function escopoVazio(escopo) {
+  return !!escopo && !escopo.tem_periodo && !escopo.direcao && !escopo.tipo;
+}
+
 async function clicarVerificarCopia() {
   const status = document.getElementById('status-verificar');
-  document.getElementById('resultado-verificar').innerHTML = '';
   document.getElementById('verificarFiltros').style.display = 'none';
   status.className = 'status-form';
   status.textContent = 'Verificando...';
@@ -951,74 +1038,68 @@ async function clicarVerificarCopia() {
 
   ultimoFaltando = r.faltando || [];
   faltandoSelecionadas = new Set();
+  verificarState.filtros = filtrosVazios();
+  verificarState.ordenarPor = 'data';
+  verificarState.ordemAsc = false;
 
-  if (ultimoFaltando.length === 0) {
-    status.className = 'status-form ok';
-    status.textContent = 'Tudo copiado — nada pendente.';
+  // O escopo é o que o programa entendeu do CAMINHO da pasta escolhida
+  // (mês/direção/tipo) — mostrar isso deixa claro contra o que a
+  // comparação rodou de verdade, em vez do usuário achar que comparou
+  // contra tudo quando na real filtrou só um recorte.
+  const escopoTexto = descreverEscopo(r.escopo);
+  const avisoEscopo = escopoVazio(r.escopo)
+    ? ' ⚠ Não reconheci mês/tipo/direção nessa pasta pelo nome — comparando contra TODO o catálogo, não só o que essa pasta deveria ter.'
+    : '';
+
+  // total_no_escopo=0 é MUITO diferente de "tudo copiado": significa que o
+  // CATÁLOGO não tem nenhuma nota nesse recorte pra comparar — o sistema
+  // não capturou nada ainda, não dá pra confirmar coisa nenhuma. Sem essa
+  // distinção a tela dizia "Tudo copiado" quando na real não tinha base
+  // nenhuma de comparação (bug reportado).
+  if (r.total_no_escopo === 0) {
+    status.className = 'status-form erro';
+    status.textContent = '⚠ Sem base de comparação: o catálogo do sistema não tem NENHUMA nota' +
+      (escopoTexto ? ' (' + escopoTexto + ')' : '') +
+      ' — isso não quer dizer que está tudo copiado, quer dizer que o programa ainda não capturou nada desse recorte. Confira se a coleta realmente trouxe essas notas.' + avisoEscopo;
+    renderizarTabela(verificarState);
     return;
   }
 
-  status.className = 'status-form';
-  status.textContent = ultimoFaltando.length + ' nota(s) ainda não encontrada(s):';
-
-  const meses = Array.from(new Set(ultimoFaltando.map(f => (f.data || '').substring(0, 7)))).sort().reverse();
-  const selMes = document.getElementById('verificarMes');
-  selMes.innerHTML = '<option value="">Todos os meses</option>' + meses.map(m => `<option value="${m}">${m}</option>`).join('');
-  document.getElementById('verificarBusca').value = '';
-  document.getElementById('verificarFiltros').style.display = 'flex';
-
-  renderizarFaltando();
-}
-
-function faltandoFiltradas() {
-  const busca = document.getElementById('verificarBusca').value.toLowerCase();
-  const mes = document.getElementById('verificarMes').value;
-  return ultimoFaltando.filter(f => {
-    if (mes && (f.data || '').substring(0, 7) !== mes) return false;
-    if (busca && !(f.fornecedor || '').toLowerCase().includes(busca) && !(f.numero || '').toLowerCase().includes(busca)) return false;
-    return true;
-  });
-}
-
-function renderizarFaltando() {
-  const div = document.getElementById('resultado-verificar');
-  div.innerHTML = '';
-  for (const f of faltandoFiltradas()) {
-    const item = document.createElement('div');
-    item.className = 'resultado-item';
-
-    const esquerda = document.createElement('span');
-    esquerda.className = 'esquerda';
-    const chk = document.createElement('input');
-    chk.type = 'checkbox';
-    chk.checked = faltandoSelecionadas.has(f.caminho);
-    chk.onchange = () => {
-      if (chk.checked) faltandoSelecionadas.add(f.caminho);
-      else faltandoSelecionadas.delete(f.caminho);
-    };
-    esquerda.appendChild(chk);
-    // mostra o NOME DE ARQUIVO real (o mesmo padrão que organizer.FileName
-    // já usa: FORNECEDOR_DATA_TIPO NUMERO_R$ VALOR.xml) em vez de um texto
-    // formatado à parte — assim o que aparece na tela é exatamente o que
-    // vai dentro do ZIP, sem risco de duas versões divergentes.
-    esquerda.appendChild(document.createTextNode(nomeBase(f.caminho)));
-
-    const valorSpan = document.createElement('span');
-    valorSpan.className = 'valor2';
-    valorSpan.textContent = formatarValor(f.valor);
-
-    item.appendChild(esquerda);
-    item.appendChild(valorSpan);
-    div.appendChild(item);
+  if (ultimoFaltando.length === 0) {
+    status.className = 'status-form ok';
+    status.textContent = 'Tudo copiado — nada pendente (' + r.total_no_escopo + ' nota(s) no catálogo' + (escopoTexto ? ', ' + escopoTexto : '') + ').' + avisoEscopo;
+    renderizarTabela(verificarState);
+    return;
   }
+
+  status.className = 'status-form' + (avisoEscopo ? ' erro' : '');
+  status.textContent = ultimoFaltando.length + ' nota(s) ainda não encontrada(s)' + (escopoTexto ? ' — ' + escopoTexto : '') + ':' + avisoEscopo;
+
+  document.getElementById('verificarFiltros').style.display = 'flex';
+  renderizarTabela(verificarState);
 }
 
 function marcarTodosFaltando(marcar) {
-  for (const f of faltandoFiltradas()) {
-    if (marcar) faltandoSelecionadas.add(f.caminho);
-    else faltandoSelecionadas.delete(f.caminho);
+  // "todas" = tudo que está filtrado/visível na tabela agora, não
+  // necessariamente ultimoFaltando inteiro (respeita os filtros de coluna
+  // ativos, igual Entrada/Saída fazem).
+  const f = verificarState.filtros;
+  const visiveis = ultimoFaltando.filter(e => {
+    if (f.cnpj && !f.cnpj.has(e.fornecedor_doc || '(vazio)')) return false;
+    if (f.chaveacesso && !f.chaveacesso.has(e.chave || '(vazio)')) return false;
+    if (f.fornecedor && !f.fornecedor.has(e.fornecedor || '(vazio)')) return false;
+    if (f.numero && !f.numero.has(e.numero || '(vazio)')) return false;
+    if (f.valor && !f.valor.has(formatarValor(e.valor || 0))) return false;
+    const dataISO = (e.data || '').substring(0, 10);
+    if (f.dataDe && dataISO < f.dataDe) return false;
+    if (f.dataAte && dataISO > f.dataAte) return false;
+    return true;
+  });
+  for (const e of visiveis) {
+    if (marcar) faltandoSelecionadas.add(e.caminho);
+    else faltandoSelecionadas.delete(e.caminho);
   }
-  renderizarFaltando();
+  renderizarTabela(verificarState);
 }
 
 async function clicarGerarZip() {
@@ -1102,7 +1183,13 @@ function clicarReconfigurar() {
 }
 
 async function clicarDesinstalar() {
-  if (!confirm('Isso remove a tarefa agendada, apaga o programa, a configuração, o catálogo e os logs. As notas já baixadas (XMLs) NÃO são apagadas — continuam nas pastas nfe-compras e nfse. Não dá pra desfazer. Confirma?')) {
+  // Um "confirm()" só é fácil demais de clicar sem ler (bug reportado —
+  // usuário achou que era arriscado demais apagar com um clique só).
+  // Exige digitar a palavra exata em vez de só clicar OK — não é senha do
+  // Windows de verdade, mas já corta clique acidental/automático.
+  const digitado = prompt('Isso remove a tarefa agendada, apaga o programa, a configuração, o catálogo e os logs. As notas já baixadas (XMLs) NÃO são apagadas — continuam nas pastas de notas. Não dá pra desfazer.\n\nDigite DESINSTALAR (tudo maiúsculo) pra confirmar:');
+  if (digitado !== 'DESINSTALAR') {
+    if (digitado !== null) alert('Texto não bateu com "DESINSTALAR" — cancelado, nada foi apagado.');
     return;
   }
   const status = document.getElementById('status-desinstalar');

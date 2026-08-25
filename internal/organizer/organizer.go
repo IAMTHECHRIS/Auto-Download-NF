@@ -55,22 +55,43 @@ func formatBRL(v float64) string {
 }
 
 // FolderPath monta ANO/MES/TIPO com base na data do documento (não na data
-// de hoje), ex: 2026/09/NFES.
+// de hoje), ex: 2026/09/NFES. Só faz sentido quando a MESMA pasta raiz
+// recebe mais de um tipo de documento — nenhum coletor faz isso hoje (ver
+// FolderPathPlano), mantido por flexibilidade futura.
 func FolderPath(baseDir string, d document.Document) string {
 	ano := d.Data.Format("2006")
 	mes := d.Data.Format("01")
 	return filepath.Join(baseDir, ano, mes, string(d.Tipo))
 }
 
+// FolderPathPlano monta só ANO/MES, sem subpasta de tipo — usado quando a
+// pasta raiz já é exclusiva de um tipo só (NFE_COMPRAS só recebe NFEC,
+// NFE_SERVICO só recebe NFES, NFS_SERVICO só recebe NFES-EMITIDA). Repetir
+// o tipo como subpasta nesses casos é redundante e quebra a convenção de
+// nome que o usuário já usa na pasta de arquivo real (bug reportado:
+// ".../NFS_SERVICO/2026/08/NFES-EMITIDA" tinha um nível a mais).
+func FolderPathPlano(baseDir string, d document.Document) string {
+	return filepath.Join(baseDir, d.Data.Format("2006"), d.Data.Format("01"))
+}
+
 // PlaceDocument cria a árvore de pastas se não existir e grava o arquivo
-// (ext inclui o ponto, ex: ".pdf" ou ".xml"). NUNCA sobrescreve um arquivo
-// existente — se o nome colidir (dois documentos distintos com mesmo
-// fornecedor/data/número/valor, ex: nota reemitida com o mesmo número após
-// cancelamento), desambigua acrescentando os últimos dígitos da chave de
-// acesso. Colisão real (mesmo conteúdo) é bug de dado — melhor um nome feio
-// do que perder um documento fiscal.
+// (ext inclui o ponto, ex: ".pdf" ou ".xml") em ANO/MES/TIPO. NUNCA
+// sobrescreve um arquivo existente — se o nome colidir (dois documentos
+// distintos com mesmo fornecedor/data/número/valor, ex: nota reemitida com
+// o mesmo número após cancelamento), desambigua acrescentando os últimos
+// dígitos da chave de acesso. Colisão real (mesmo conteúdo) é bug de dado —
+// melhor um nome feio do que perder um documento fiscal.
 func PlaceDocument(baseDir string, d document.Document, ext string, content []byte) (string, error) {
-	dir := FolderPath(baseDir, d)
+	return placeEm(FolderPath(baseDir, d), d, ext, content)
+}
+
+// PlaceDocumentPlano é o mesmo que PlaceDocument, mas grava em ANO/MES (sem
+// subpasta de tipo) — ver FolderPathPlano.
+func PlaceDocumentPlano(baseDir string, d document.Document, ext string, content []byte) (string, error) {
+	return placeEm(FolderPathPlano(baseDir, d), d, ext, content)
+}
+
+func placeEm(dir string, d document.Document, ext string, content []byte) (string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return "", fmt.Errorf("criar pasta %s: %w", dir, err)
 	}
@@ -132,5 +153,5 @@ func PlaceEventoSemReferencia(baseDir string, e document.EventoCancelamento, con
 		Numero:     e.ChaveOriginal,
 		Status:     "CANCELADO-SEM-REFERENCIA",
 	}
-	return PlaceDocument(baseDir, doc, ".xml", content)
+	return PlaceDocumentPlano(baseDir, doc, ".xml", content)
 }

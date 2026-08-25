@@ -174,11 +174,11 @@ func rodarColeta(cfg appconfig.Config) {
 		return
 	}
 
-	if err := coletanfe.Run(cfg); err != nil {
+	if _, err := coletanfe.Run(cfg); err != nil {
 		log.Printf("coleta de NFe: %v", err)
 	}
 
-	if err := coletansfe.Run(cfg); err != nil {
+	if _, err := coletansfe.Run(cfg); err != nil {
 		log.Printf("coleta de NFSe: %v", err)
 	}
 
