@@ -119,4 +119,4 @@ internal/
 
 ## Licença
 
-Sem licença definida ainda — uso pessoal/educacional por enquanto.
+[MIT](LICENSE) — use, copie, modifique e distribua livremente.

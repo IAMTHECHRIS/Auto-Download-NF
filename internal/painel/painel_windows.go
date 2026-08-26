@@ -427,7 +427,7 @@ if ($pasta -ne $null) {
 			debugLog.Printf("<< erro ao remover tarefa: %v", err)
 			return respostaErro(err.Error())
 		}
-		if err := agendarAutoLimpeza(appconfig.PastaControle(cfg.PastaSaida)); err != nil {
+		if err := agendarAutoLimpeza(appconfig.PastaControle(cfg.PastaSaida), exePathAtual()); err != nil {
 			debugLog.Printf("<< erro ao agendar limpeza: %v", err)
 			return respostaErro(err.Error())
 		}
@@ -445,28 +445,61 @@ if ($pasta -ne $null) {
 	return reconfigurar, nil
 }
 
+// exePathAtual devolve o caminho do executável atual, ou "" se não conseguir
+// resolver (nesse caso agendarAutoLimpeza só não consegue matar OUTRAS
+// instâncias por caminho — o resto da limpeza segue normal).
+func exePathAtual() string {
+	p, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return p
+}
+
 // agendarAutoLimpeza dispara um processo PowerShell DESANEXADO (roda solto,
 // não é filho que morre junto com a gente) que espera alguns segundos —
 // tempo pro processo atual fechar e soltar o arquivo do .exe — e só então
 // apaga a pasta inteira, incluindo o próprio executável.
-func agendarAutoLimpeza(pastaControle string) error {
+func agendarAutoLimpeza(pastaControle, exePath string) error {
 	// Antes era uma tentativa ÚNICA de Remove-Item com
 	// -ErrorAction SilentlyContinue, que ENGOLE qualquer falha sem avisar
 	// nada — se o .exe atual não tivesse soltado o arquivo a tempo (comum:
 	// antivírus/Defender escaneando o .exe recém-rodado, ou o processo
 	// ainda fechando), a limpeza simplesmente não acontecia e ninguém
-	// sabia por quê (bug reportado: "continua tudo aqui" depois de
-	// desinstalar). Agora tenta várias vezes ao longo de ~20s, e se mesmo
-	// assim falhar, deixa um log FORA da pasta que estava tentando apagar
-	// (senão o próprio log de erro não sobrevive pra explicar o erro).
+	// sabia por quê. Depois veio um retry de 18s — melhorou mas o bug
+	// PERSISTIU (reportado de novo): causa real encontrada é a TAREFA
+	// AGENDADA disparando uma segunda instância do .exe em background (boot
+	// ou 08:00) bem na hora em que o usuário desinstala pela janela aberta —
+	// essa segunda instância segura o lock do arquivo por todo o tempo que
+	// a coleta leva (pode passar de 1 minuto, bem mais que os 18s de retry),
+	// e nunca é fechada por nada que a janela interativa faça, porque é um
+	// processo totalmente separado. Duas correções:
+	//   1) mata explicitamente qualquer OUTRA instância do mesmo .exe antes
+	//      de começar a tentar apagar (RemoverTarefa já impede que uma NOVA
+	//      dispare, mas não afeta uma que já esteja rodando).
+	//   2) se depois de alguns segundos a pasta ainda não saiu (sinal de que
+	//      a própria instância atual, por algum motivo, não fechou rápido o
+	//      bastante — webview_go às vezes demora a soltar o processo depois
+	//      de Terminate()), força o encerramento dela também pelo PID.
 	logErro := filepath.Join(os.TempDir(), "io-nf-automation-desinstalar-erro.log")
+	miPID := os.Getpid()
 	script := fmt.Sprintf(`
 $ErrorActionPreference = 'Stop'
 $pasta = %s
 $logErro = %s
+$exePath = %s
+$miPid = %d
+
+try {
+    Get-Process | Where-Object { $_.Id -ne $miPid -and $_.Path -eq $exePath } | Stop-Process -Force -ErrorAction SilentlyContinue
+} catch {}
+
 $sucesso = $false
-for ($i = 0; $i -lt 18; $i++) {
+for ($i = 0; $i -lt 25; $i++) {
     Start-Sleep -Seconds 1
+    if ($i -eq 5) {
+        try { Stop-Process -Id $miPid -Force -ErrorAction SilentlyContinue } catch {}
+    }
     try {
         Remove-Item -LiteralPath $pasta -Recurse -Force
         $sucesso = $true
@@ -476,9 +509,9 @@ for ($i = 0; $i -lt 18; $i++) {
     }
 }
 if (-not $sucesso) {
-    "$(Get-Date -Format o) — falha ao apagar '$pasta' apos 18 tentativas: $ultimoErro" | Out-File -FilePath $logErro -Append -Encoding utf8
+    "$(Get-Date -Format o) — falha ao apagar '$pasta' apos 25 tentativas: $ultimoErro" | Out-File -FilePath $logErro -Append -Encoding utf8
 }
-`, aspasPS(pastaControle), aspasPS(logErro))
+`, aspasPS(pastaControle), aspasPS(logErro), aspasPS(exePath), miPID)
 
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-WindowStyle", "Hidden", "-Command", script)
 	const createNoWindow = 0x08000000
