@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"io-nf-automation/internal/adn"
@@ -34,12 +35,17 @@ type Resumo struct {
 	OutrosTipos           int
 	Erros                 int
 	NSU                   int
+	StatusProcessamento   string
+	TipoAmbiente          string
+	Alertas               []string
+	ErrosAPI              []string
+	TiposDocumento        map[string]int
 	ParouPorLimitePaginas bool // rodou até MaxPaginas sem esvaziar — pode ter mais
 }
 
 func Run(cfg appconfig.Config) (Resumo, error) {
-	var resumo Resumo
-	client, err := adn.NewClient(cfg.CertificadoPfx, cfg.CertificadoSenha)
+	resumo := Resumo{TiposDocumento: make(map[string]int)}
+	client, err := adn.NewClient(cfg.CertificadoPfx, cfg.CertificadoSenha, cfg.TpAmb())
 	if err != nil {
 		return resumo, fmt.Errorf("criar client ADN: %w", err)
 	}
@@ -49,9 +55,9 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 	// ficavam juntas em "nfse/", só diferenciadas pelo Tipo — a pasta raiz
 	// agora deixa a separação física, batendo com a convenção usada na
 	// pasta de arquivo real (Y:\...\NF ENTRADA\ / NF SAÍDA\).
-	outDirRecebida := filepath.Join(cfg.PastaSaida, "NFE", "NFE_SERVICO")
-	outDirEmitida := filepath.Join(cfg.PastaSaida, "NFS", "NFS_SERVICO")
-	pastaControle := appconfig.PastaControle(cfg.PastaSaida)
+	outDirRecebida := filepath.Join(cfg.PastaEfetiva(), "NFE", "NFE_SERVICO")
+	outDirEmitida := filepath.Join(cfg.PastaEfetiva(), "NFS", "NFS_SERVICO")
+	pastaControle := appconfig.PastaControle(cfg.PastaEfetiva())
 	if err := os.MkdirAll(pastaControle, 0o755); err != nil {
 		return resumo, fmt.Errorf("criar pasta _Controle: %w", err)
 	}
@@ -75,7 +81,7 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 	// o mesmo NSU duplica arquivo (gravando de novo, colidindo e criando
 	// cópia com sufixo), e cancelamento de nota de rodada anterior não
 	// encontra a nota original.
-	if existentes, err := catalogo.Listar(cfg.PastaSaida); err != nil {
+	if existentes, err := catalogo.Listar(cfg.PastaEfetiva()); err != nil {
 		log.Printf("[NFSe] aviso: não consegui pré-carregar o catálogo (seguindo sem isso): %v", err)
 	} else {
 		for _, ex := range existentes {
@@ -101,13 +107,31 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 		resp, err := client.BuscarLote(nsu)
 		if err != nil {
 			log.Printf("[NFSe] buscar lote NSU=%d: %v — parando", nsu, err)
+			erros++
+			resumo.Erros = erros
 			resumo.ParouPorLimitePaginas = false
-			break
+			return resumo, fmt.Errorf("buscar lote NSU=%d: %w", nsu, err)
 		}
 		resumo.Paginas++
+		resumo.StatusProcessamento = resp.StatusProcessamento
+		resumo.TipoAmbiente = resp.TipoAmbiente
+		resumo.Alertas = append(resumo.Alertas, resp.Alertas...)
+		resumo.ErrosAPI = append(resumo.ErrosAPI, resp.Erros...)
 
-		fmt.Printf("[NFSe] Página %d — NSU inicial %d — status: %s — %d documentos\n",
-			pagina+1, nsu, resp.StatusProcessamento, len(resp.LoteDFe))
+		fmt.Printf("[NFSe] Página %d — NSU inicial %d — ambiente: %s — status: %s — %d documentos\n",
+			pagina+1, nsu, resp.TipoAmbiente, resp.StatusProcessamento, len(resp.LoteDFe))
+		if len(resp.Alertas) > 0 {
+			log.Printf("[NFSe] alertas ADN: %s", strings.Join(resp.Alertas, " | "))
+		}
+		if len(resp.Erros) > 0 {
+			log.Printf("[NFSe] erros ADN: %s", strings.Join(resp.Erros, " | "))
+			erros += len(resp.Erros)
+			resumo.Erros = erros
+			if len(resp.LoteDFe) == 0 {
+				resumo.ParouPorLimitePaginas = false
+				return resumo, fmt.Errorf("ADN retornou erro sem documentos: %s", strings.Join(resp.Erros, " | "))
+			}
+		}
 
 		if len(resp.LoteDFe) == 0 {
 			resumo.ParouPorLimitePaginas = false
@@ -127,7 +151,14 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 				continue
 			}
 
-			if item.TipoDocumento == "EVENTO" {
+			tipoDocumento := tipoDocumentoADN(item.TipoDocumento)
+			tipoMapa := strings.TrimSpace(item.TipoDocumento)
+			if tipoMapa == "" {
+				tipoMapa = "(vazio)"
+			}
+			resumo.TiposDocumento[tipoMapa]++
+
+			if tipoDocumento == "EVENTO" {
 				ev, err := document.ParseEvento(xmlBytes)
 				if err != nil {
 					log.Printf("[NFSe]   NSU %d: erro ao parsear evento: %v", item.NSU, err)
@@ -149,7 +180,7 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 					reg.caminho = novoCaminho
 					reg.doc.Status = "CANCELADO"
 					processadas[ev.ChaveOriginal] = reg
-					if err := catalogo.Registrar(cfg.PastaSaida, reg.doc, reg.caminho); err != nil {
+					if err := catalogo.Registrar(cfg.PastaEfetiva(), reg.doc, reg.caminho); err != nil {
 						log.Printf("[NFSe]   NSU %d: aviso ao registrar cancelamento no catálogo: %v", item.NSU, err)
 					}
 					cancelamentos++
@@ -170,7 +201,8 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 				continue
 			}
 
-			if item.TipoDocumento != "NFSE" {
+			if tipoDocumento != "NFSE" {
+				log.Printf("[NFSe]   NSU %d: tipo %q não é NFSe — ignorando", item.NSU, item.TipoDocumento)
 				outrosTipos++
 				continue
 			}
@@ -192,6 +224,7 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 				doc.Tipo = document.TipoNFESEmitida
 				outDir = outDirEmitida
 			default:
+				log.Printf("[NFSe]   NSU %d: CNPJ do XML não bate com o CNPJ configurado — ignorando chave %s", item.NSU, item.ChaveAcesso)
 				outras++
 				continue
 			}
@@ -207,7 +240,7 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 				continue
 			}
 			processadas[doc.Chave] = registro{caminho: caminho, doc: doc}
-			if err := catalogo.Registrar(cfg.PastaSaida, doc, caminho); err != nil {
+			if err := catalogo.Registrar(cfg.PastaEfetiva(), doc, caminho); err != nil {
 				log.Printf("[NFSe]   NSU %d: aviso ao registrar no catálogo: %v", item.NSU, err)
 			}
 			fmt.Printf("[NFSe]   NSU %d [%s] -> %s\n", item.NSU, direcao, caminho)
@@ -230,8 +263,13 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 	resumo.NSU = nsu
 
 	fmt.Println("[NFSe] === Resumo ===")
-	fmt.Printf("[NFSe] recebidas=%d emitidas=%d cancelados=%d semRef=%d outras=%d outrosTipos=%d erros=%d checkpoint=%d\n",
-		recebidas, emitidas, cancelamentos, semReferencia, outras, outrosTipos, erros, nsu)
+	fmt.Printf("[NFSe] recebidas=%d emitidas=%d cancelados=%d semRef=%d outras=%d outrosTipos=%d erros=%d checkpoint=%d ambiente=%s status=%s tipos=%v\n",
+		recebidas, emitidas, cancelamentos, semReferencia, outras, outrosTipos, erros, nsu, resumo.TipoAmbiente, resumo.StatusProcessamento, resumo.TiposDocumento)
 
 	return resumo, nil
+}
+
+func tipoDocumentoADN(tipo string) string {
+	replacer := strings.NewReplacer("-", "", "_", "", " ", "")
+	return strings.ToUpper(replacer.Replace(strings.TrimSpace(tipo)))
 }

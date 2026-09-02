@@ -19,6 +19,11 @@ import (
 
 const baseURLProducao = "https://adn.nfse.gov.br/contribuintes"
 
+// baseURLHomologacao — a SEFAZ chama esse ambiente de "produção restrita",
+// mas é o equivalente funcional de homologação: dado fictício, sem contar
+// pra cota real.
+const baseURLHomologacao = "https://adn.producaorestrita.nfse.gov.br/contribuintes"
+
 // Client fala com a API ADN usando mTLS (o certificado É a autenticação —
 // sem usuário/senha/token separado).
 type Client struct {
@@ -28,8 +33,9 @@ type Client struct {
 
 // NewClient monta um client autenticado direto a partir do .pfx original —
 // sem depender de OpenSSL nem de extrair .pem antes. Funciona igual em
-// Linux e Windows.
-func NewClient(caminhoPfx, senhaPfx string) (*Client, error) {
+// Linux e Windows. tpAmb é "1" (produção) ou "2" (homologação) — ver
+// appconfig.Config.TpAmb().
+func NewClient(caminhoPfx, senhaPfx, tpAmb string) (*Client, error) {
 	cert, err := certload.FromPFXValidado(caminhoPfx, senhaPfx)
 	if err != nil {
 		return nil, fmt.Errorf("carregar certificado: %w", err)
@@ -41,8 +47,13 @@ func NewClient(caminhoPfx, senhaPfx string) (*Client, error) {
 		},
 	}
 
+	baseURL := baseURLProducao
+	if tpAmb == "2" {
+		baseURL = baseURLHomologacao
+	}
+
 	return &Client{
-		baseURL: baseURLProducao,
+		baseURL: baseURL,
 		HTTPClient: &http.Client{
 			Timeout:   30 * time.Second,
 			Transport: transport,

@@ -84,8 +84,23 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 	w.SetTitle("Coletor de Notas Fiscais — Painel")
 	w.SetSize(900, 640, webview.HintNone)
 
+	// resolverAsync entrega o resultado de uma chamada assíncrona pro JS. As
+	// funções ligadas que fazem rede/disco pesado (buscarAgora, buscarPorChave,
+	// verificarCopia, baixarSelecionados, gerarZip) NÃO retornam valor — elas
+	// disparam o trabalho numa goroutine e chamam isso aqui quando terminam.
+	// w.Dispatch() é a única forma seThreadsafe de mexer na UI a partir de uma
+	// goroutine nesse binding do webview — ele enfileira a função pra rodar na
+	// thread certa sem bloquear o loop de mensagens do Windows enquanto isso.
+	// Ver window.__resolverAsync / chamarAsync em painel.html pro lado JS.
+	resolverAsync := func(id int, resultadoJSON string) {
+		w.Dispatch(func() {
+			codificado, _ := json.Marshal(resultadoJSON)
+			w.Eval(fmt.Sprintf("window.__resolverAsync(%d, %s)", id, codificado))
+		})
+	}
+
 	w.Bind("listarCatalogo", func() string {
-		entradas, err := catalogo.Listar(cfg.PastaSaida)
+		entradas, err := catalogo.Listar(cfg.PastaEfetiva())
 		if err != nil {
 			debugLog.Printf("listarCatalogo erro: %v", err)
 			b, _ := json.Marshal(map[string]any{"ok": false, "erro": err.Error()})
@@ -96,135 +111,167 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 		return string(b)
 	})
 
-	w.Bind("buscarAgora", func() string {
-		debugLog.Printf(">> buscarAgora")
-		var erros []string
+	w.Bind("buscarAgora", func(id int) {
+		go func() {
+			debugLog.Printf(">> buscarAgora")
+			var erros []string
 
-		resumoNFe, err := coletanfe.Run(cfg)
-		if err != nil {
-			erros = append(erros, "NFe: "+err.Error())
-		}
-		resumoNFSe, err := coletansfe.Run(cfg)
-		if err != nil {
-			erros = append(erros, "NFSe: "+err.Error())
-		}
-		debugLog.Printf("<< buscarAgora nfe=%+v nfse=%+v erros=%v", resumoNFe, resumoNFSe, erros)
-
-		// diagnóstico: "0 notas novas" pode significar duas coisas bem
-		// diferentes — já está em dia (bom sinal) ou parou no meio do
-		// caminho antes de achar algo novo (MaxPaginas acabou). Sem
-		// distinguir isso o usuário fica sem saber se precisa só clicar
-		// "Buscar" de novo pra continuar de onde parou.
-		var diagnostico string
-		switch {
-		case resumoNFe.CStat != "" && resumoNFe.CStat != "137" && resumoNFe.CStat != "138" && !resumoNFe.AutoCorrigido:
-			// rejeitado de verdade e não deu pra auto-corrigir — motivo
-			// real da SEFAZ, não escondido atrás de "sem notas novas".
-			diagnostico = fmt.Sprintf("⚠ NFEC/CT-e: a SEFAZ RECUSOU o pedido (cStat=%s: %s) — não é \"sem notas novas\", é rejeição de verdade. NÃO fique clicando \"Buscar\" repetidamente — se for bloqueio por reinício de NSU, pode levar até 1h pra liberar sozinho.", resumoNFe.CStat, resumoNFe.XMotivo)
-		case resumoNFe.AutoCorrigido:
-			diagnostico = fmt.Sprintf("NFEC/CT-e: o checkpoint local estava desatualizado — a SEFAZ recusou (cStat=%s: %s), mas revelou o NSU certo (%d) e o programa já se auto-corrigiu e retomou dali.", resumoNFe.CStat, resumoNFe.XMotivo, resumoNFe.NSUAutoCorrigido)
-			if resumoNFe.Novas == 0 && !resumoNFe.EmDia() {
-				diagnostico += " Ainda tem mais pra varrer — clique em \"Buscar notas agora\" de novo."
+			resumoNFe, err := coletanfe.Run(cfg)
+			if err != nil {
+				erros = append(erros, "NFe: "+err.Error())
 			}
-		case resumoNFe.Novas == 0 && resumoNFe.EmDia():
-			diagnostico = "NFEC/CT-e: sem notas novas — já está em dia com a SEFAZ."
-		case resumoNFe.Novas == 0 && resumoNFe.Paginas > 0:
-			diagnostico = fmt.Sprintf("NFEC/CT-e: sem notas novas nesta rodada, mas ainda tem mais pra varrer (parou no NSU %s de %s após %d página(s)) — clique em \"Buscar notas agora\" de novo pra continuar.", resumoNFe.UltNSU, resumoNFe.MaxNSU, resumoNFe.Paginas)
-		}
-		if resumoNFSe.ParouPorLimitePaginas {
-			if diagnostico != "" {
-				diagnostico += " "
+			resumoNFSe, err := coletansfe.Run(cfg)
+			if err != nil {
+				erros = append(erros, "NFSe: "+err.Error())
 			}
-			diagnostico += fmt.Sprintf("NFS-e: rodada terminou no limite de %d página(s) sem esvaziar — pode ter mais, busque de novo.", coletansfe.MaxPaginas)
-		}
+			debugLog.Printf("<< buscarAgora nfe=%+v nfse=%+v erros=%v", resumoNFe, resumoNFSe, erros)
 
-		b, _ := json.Marshal(map[string]any{"ok": len(erros) == 0, "erros": erros, "diagnostico": diagnostico})
-		return string(b)
+			// diagnóstico: "0 notas novas" pode significar duas coisas bem
+			// diferentes — já está em dia (bom sinal) ou parou no meio do
+			// caminho antes de achar algo novo (MaxPaginas acabou). Sem
+			// distinguir isso o usuário fica sem saber se precisa só clicar
+			// "Buscar" de novo pra continuar de onde parou.
+			var diagnostico string
+			switch {
+			case resumoNFe.CStat != "" && resumoNFe.CStat != "137" && resumoNFe.CStat != "138" && !resumoNFe.AutoCorrigido:
+				// rejeitado de verdade e não deu pra auto-corrigir — motivo
+				// real da SEFAZ, não escondido atrás de "sem notas novas".
+				diagnostico = fmt.Sprintf("⚠ NFEC/CT-e: a SEFAZ RECUSOU o pedido (cStat=%s: %s) — não é \"sem notas novas\", é rejeição de verdade. NÃO fique clicando \"Buscar\" repetidamente — se for bloqueio por reinício de NSU, pode levar até 1h pra liberar sozinho.", resumoNFe.CStat, resumoNFe.XMotivo)
+			case resumoNFe.AutoCorrigido:
+				diagnostico = fmt.Sprintf("NFEC/CT-e: o checkpoint local estava desatualizado — a SEFAZ recusou (cStat=%s: %s), mas revelou o NSU certo (%d) e o programa já se auto-corrigiu e retomou dali.", resumoNFe.CStat, resumoNFe.XMotivo, resumoNFe.NSUAutoCorrigido)
+				if resumoNFe.Novas == 0 && !resumoNFe.EmDia() {
+					diagnostico += " Ainda tem mais pra varrer — clique em \"Buscar notas agora\" de novo."
+				}
+			case resumoNFe.Novas == 0 && resumoNFe.EmDia():
+				diagnostico = "NFEC/CT-e: sem notas novas — já está em dia com a SEFAZ."
+			case resumoNFe.Novas == 0 && resumoNFe.Paginas > 0:
+				diagnostico = fmt.Sprintf("NFEC/CT-e: sem notas novas nesta rodada, mas ainda tem mais pra varrer (parou no NSU %s de %s após %d página(s)) — clique em \"Buscar notas agora\" de novo pra continuar.", resumoNFe.UltNSU, resumoNFe.MaxNSU, resumoNFe.Paginas)
+			}
+			if resumoNFSe.ParouPorLimitePaginas {
+				if diagnostico != "" {
+					diagnostico += " "
+				}
+				diagnostico += fmt.Sprintf("NFS-e: rodada terminou no limite de %d página(s) sem esvaziar — pode ter mais, busque de novo.", coletansfe.MaxPaginas)
+			} else if diagNFSe := diagnosticoNFSe(resumoNFSe); diagNFSe != "" {
+				if diagnostico != "" {
+					diagnostico += " "
+				}
+				diagnostico += diagNFSe
+			}
+
+			b, _ := json.Marshal(map[string]any{"ok": len(erros) == 0, "erros": erros, "diagnostico": diagnostico})
+			resolverAsync(id, string(b))
+		}()
 	})
 
-	w.Bind("buscarPorChave", func(chave string) string {
-		chave = strings.TrimSpace(chave)
-		debugLog.Printf(">> buscarPorChave chave=%s", chave)
-		if len(chave) != 44 {
-			return respostaErro("A chave de acesso precisa ter 44 dígitos.")
-		}
-		for _, r := range chave {
-			if r < '0' || r > '9' {
-				return respostaErro("A chave de acesso só tem números.")
+	w.Bind("buscarPorChave", func(id int, chave string) {
+		go func() {
+			chave = strings.TrimSpace(chave)
+			debugLog.Printf(">> buscarPorChave chave=%s", chave)
+			if len(chave) != 44 {
+				resolverAsync(id, respostaErro("A chave de acesso precisa ter 44 dígitos."))
+				return
 			}
-		}
-
-		// espaçamento mínimo entre consultas avulsas — não sabemos a cota
-		// exata que a SEFAZ tolera pra esse tipo de consulta pontual
-		// (consChNFe), então evita disparar em sequência rápida.
-		if !ultimaConsultaChave.IsZero() {
-			espera := espacamentoMinimoChave - time.Since(ultimaConsultaChave)
-			if espera > 0 {
-				time.Sleep(espera)
+			for _, r := range chave {
+				if r < '0' || r > '9' {
+					resolverAsync(id, respostaErro("A chave de acesso só tem números."))
+					return
+				}
 			}
-		}
-		ultimaConsultaChave = time.Now()
-		contadorConsultasChave++
 
-		doc, caminho, err := coletanfe.BuscarUma(cfg, chave)
-		debugLog.Printf("<< buscarPorChave doc=%+v caminho=%s err=%v", doc, caminho, err)
-		if err != nil {
-			return respostaErro(err.Error())
-		}
+			// espaçamento mínimo entre consultas avulsas — não sabemos a cota
+			// exata que a SEFAZ tolera pra esse tipo de consulta pontual
+			// (consChNFe), então evita disparar em sequência rápida.
+			if !ultimaConsultaChave.IsZero() {
+				espera := espacamentoMinimoChave - time.Since(ultimaConsultaChave)
+				if espera > 0 {
+					time.Sleep(espera)
+				}
+			}
+			ultimaConsultaChave = time.Now()
+			contadorConsultasChave++
 
-		msg := fmt.Sprintf("Nota %s de %s salva em: %s", doc.Numero, doc.Fornecedor, caminho)
-		if contadorConsultasChave >= 5 {
-			msg += fmt.Sprintf(" — atenção: já são %d consultas avulsas nessa sessão; não temos confirmação do limite diário da SEFAZ pra esse tipo de busca, evite repetir sem necessidade.", contadorConsultasChave)
-		}
-		pdfCaminho := strings.TrimSuffix(caminho, filepath.Ext(caminho)) + ".pdf"
-		_, errPdf := os.Stat(pdfCaminho)
-		b, _ := json.Marshal(map[string]any{"ok": true, "mensagem": msg, "caminho": caminho, "tem_pdf": errPdf == nil})
-		return string(b)
+			doc, caminho, err := coletanfe.BuscarUma(cfg, chave)
+			debugLog.Printf("<< buscarPorChave doc=%+v caminho=%s err=%v", doc, caminho, err)
+			if err != nil {
+				resolverAsync(id, respostaErro(err.Error()))
+				return
+			}
+
+			msg := fmt.Sprintf("Nota %s de %s salva em: %s", doc.Numero, doc.Fornecedor, caminho)
+			if contadorConsultasChave >= 5 {
+				msg += fmt.Sprintf(" — atenção: já são %d consultas avulsas nessa sessão; não temos confirmação do limite diário da SEFAZ pra esse tipo de busca, evite repetir sem necessidade.", contadorConsultasChave)
+			}
+			pdfCaminho := strings.TrimSuffix(caminho, filepath.Ext(caminho)) + ".pdf"
+			_, errPdf := os.Stat(pdfCaminho)
+			b, _ := json.Marshal(map[string]any{"ok": true, "mensagem": msg, "caminho": caminho, "tem_pdf": errPdf == nil})
+			resolverAsync(id, string(b))
+		}()
 	})
 
 	// pastaDestino agora é escolhida NA HORA pelo usuário (botão "Procurar"
 	// na própria aba Verificar cópia), não fica salva no config.json — o
 	// usuário pode querer checar contra pastas diferentes em momentos
 	// diferentes, não só uma fixa.
-	w.Bind("verificarCopia", func(pastaDestino string) string {
-		debugLog.Printf(">> verificarCopia pastaDestino=%s", pastaDestino)
-		r, err := verificacao.Verificar(cfg.PastaSaida, pastaDestino)
-		debugLog.Printf("<< verificarCopia escopo=%+v totalNoEscopo=%d faltando=%d err=%v", r.Escopo, r.TotalNoEscopo, len(r.Faltando), err)
-		if err != nil {
-			b, _ := json.Marshal(map[string]any{"ok": false, "erro": err.Error()})
-			return string(b)
-		}
-		b, _ := json.Marshal(map[string]any{"ok": true, "faltando": r.Faltando, "escopo": r.Escopo, "total_no_escopo": r.TotalNoEscopo})
-		return string(b)
+	w.Bind("verificarCopia", func(id int, pastaDestino string) {
+		go func() {
+			debugLog.Printf(">> verificarCopia pastaDestino=%s", pastaDestino)
+			r, err := verificacao.Verificar(cfg.PastaEfetiva(), pastaDestino)
+			debugLog.Printf("<< verificarCopia escopo=%+v totalNoEscopo=%d faltando=%d err=%v", r.Escopo, r.TotalNoEscopo, len(r.Faltando), err)
+			if err != nil {
+				b, _ := json.Marshal(map[string]any{"ok": false, "erro": err.Error()})
+				resolverAsync(id, string(b))
+				return
+			}
+			b, _ := json.Marshal(map[string]any{"ok": true, "faltando": r.Faltando, "escopo": r.Escopo, "total_no_escopo": r.TotalNoEscopo})
+			resolverAsync(id, string(b))
+		}()
 	})
 
-	// gerarZip empacota os XMLs selecionados na aba "Verificar cópia" pra o
-	// usuário levar pra onde precisar. Salva DENTRO da própria pasta de
-	// destino que ele já escolheu pra verificar — contextualmente é o
-	// lugar óbvio: é exatamente pra lá que essas notas iam de qualquer
-	// jeito, o ZIP só facilita levar tudo de uma vez.
-	w.Bind("gerarZip", func(caminhosJSON string, pastaDestino string) string {
-		var caminhos []string
-		if err := json.Unmarshal([]byte(caminhosJSON), &caminhos); err != nil {
-			return respostaErro("dados inválidos: " + err.Error())
-		}
-		if len(caminhos) == 0 {
-			return respostaErro("selecione ao menos uma nota.")
-		}
-		if strings.TrimSpace(pastaDestino) == "" {
-			return respostaErro("escolha a pasta de destino antes.")
-		}
+	// gerarZip empacota os XMLs (e, se comPdf, os PDFs correspondentes) das
+	// notas selecionadas na aba "Verificar cópia" pra o usuário levar pra
+	// onde precisar. Salva DENTRO da própria pasta de destino que ele já
+	// escolheu pra verificar. As notas aqui já estão baixadas localmente
+	// (vieram do catálogo) — comPdf só junta o .pdf irmão que já existe ao
+	// lado do .xml no disco, sem nenhuma consulta nova na SEFAZ.
+	w.Bind("gerarZip", func(id int, caminhosJSON string, pastaDestino string, comPdf bool) {
+		go func() {
+			var caminhos []string
+			if err := json.Unmarshal([]byte(caminhosJSON), &caminhos); err != nil {
+				resolverAsync(id, respostaErro("dados inválidos: "+err.Error()))
+				return
+			}
+			if len(caminhos) == 0 {
+				resolverAsync(id, respostaErro("selecione ao menos uma nota."))
+				return
+			}
+			if strings.TrimSpace(pastaDestino) == "" {
+				resolverAsync(id, respostaErro("escolha a pasta de destino antes."))
+				return
+			}
 
-		nomeZip := fmt.Sprintf("notas-selecionadas-%s.zip", time.Now().Format("20060102-1504"))
-		caminhoZip := filepath.Join(pastaDestino, nomeZip)
-		debugLog.Printf(">> gerarZip destino=%s itens=%d", caminhoZip, len(caminhos))
+			arquivos := append([]string{}, caminhos...)
+			if comPdf {
+				for _, c := range caminhos {
+					pdfCaminho := strings.TrimSuffix(c, filepath.Ext(c)) + ".pdf"
+					if _, err := os.Stat(pdfCaminho); err == nil {
+						arquivos = append(arquivos, pdfCaminho)
+					}
+				}
+			}
 
-		if err := criarZip(caminhoZip, caminhos); err != nil {
-			debugLog.Printf("<< gerarZip erro: %v", err)
-			return respostaErro(err.Error())
-		}
-		debugLog.Printf("<< gerarZip ok")
-		return respostaOK(fmt.Sprintf("ZIP com %d nota(s) criado em: %s", len(caminhos), caminhoZip))
+			nomeZip := fmt.Sprintf("notas-selecionadas-%s.zip", time.Now().Format("20060102-1504"))
+			caminhoZip := filepath.Join(pastaDestino, nomeZip)
+			debugLog.Printf(">> gerarZip destino=%s itens=%d comPdf=%v", caminhoZip, len(arquivos), comPdf)
+
+			if err := criarZip(caminhoZip, arquivos); err != nil {
+				debugLog.Printf("<< gerarZip erro: %v", err)
+				resolverAsync(id, respostaErro(err.Error()))
+				return
+			}
+			debugLog.Printf("<< gerarZip ok")
+			resolverAsync(id, respostaOK(fmt.Sprintf("ZIP com %d arquivo(s) criado em: %s", len(arquivos), caminhoZip)))
+		}()
 	})
 
 	// baixarSelecionados atende tanto a lista Entrada/Saída quanto o
@@ -233,57 +280,65 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 	// -> copia direto; mais de um -> empacota em ZIP (mesmo helper de
 	// gerarZip). PDF que não existe (nota sem DANFE gerado ainda, ou NFSe)
 	// é ignorado silenciosamente em vez de dar erro.
-	w.Bind("baixarSelecionados", func(itensJSON string, pastaDestino string) string {
-		var itens []struct {
-			Caminho string `json:"caminho"`
-			XML     bool   `json:"xml"`
-			PDF     bool   `json:"pdf"`
-		}
-		if err := json.Unmarshal([]byte(itensJSON), &itens); err != nil {
-			return respostaErro("dados inválidos: " + err.Error())
-		}
-		if strings.TrimSpace(pastaDestino) == "" {
-			return respostaErro("escolha a pasta de destino antes.")
-		}
+	w.Bind("baixarSelecionados", func(id int, itensJSON string, pastaDestino string) {
+		go func() {
+			var itens []struct {
+				Caminho string `json:"caminho"`
+				XML     bool   `json:"xml"`
+				PDF     bool   `json:"pdf"`
+			}
+			if err := json.Unmarshal([]byte(itensJSON), &itens); err != nil {
+				resolverAsync(id, respostaErro("dados inválidos: "+err.Error()))
+				return
+			}
+			if strings.TrimSpace(pastaDestino) == "" {
+				resolverAsync(id, respostaErro("escolha a pasta de destino antes."))
+				return
+			}
 
-		var arquivos []string
-		for _, it := range itens {
-			if it.Caminho == "" {
-				continue
-			}
-			if it.XML {
-				arquivos = append(arquivos, it.Caminho)
-			}
-			if it.PDF {
-				pdfCaminho := strings.TrimSuffix(it.Caminho, filepath.Ext(it.Caminho)) + ".pdf"
-				if _, err := os.Stat(pdfCaminho); err == nil {
-					arquivos = append(arquivos, pdfCaminho)
+			var arquivos []string
+			for _, it := range itens {
+				if it.Caminho == "" {
+					continue
+				}
+				if it.XML {
+					arquivos = append(arquivos, it.Caminho)
+				}
+				if it.PDF {
+					pdfCaminho := strings.TrimSuffix(it.Caminho, filepath.Ext(it.Caminho)) + ".pdf"
+					if _, err := os.Stat(pdfCaminho); err == nil {
+						arquivos = append(arquivos, pdfCaminho)
+					}
 				}
 			}
-		}
-		if len(arquivos) == 0 {
-			return respostaErro("nada pra baixar — marque XML e/ou PDF de pelo menos uma nota (o PDF só existe pra NFe/CT-e já processadas com o DANFE novo).")
-		}
-		debugLog.Printf(">> baixarSelecionados destino=%s itens=%d", pastaDestino, len(arquivos))
-
-		if len(arquivos) == 1 {
-			destino := filepath.Join(pastaDestino, filepath.Base(arquivos[0]))
-			if err := copiarArquivo(arquivos[0], destino); err != nil {
-				debugLog.Printf("<< baixarSelecionados erro: %v", err)
-				return respostaErro(err.Error())
+			if len(arquivos) == 0 {
+				resolverAsync(id, respostaErro("nada pra baixar — marque XML e/ou PDF de pelo menos uma nota (o PDF só existe pra NFe/CT-e já processadas com o DANFE novo)."))
+				return
 			}
-			debugLog.Printf("<< baixarSelecionados ok (arquivo único)")
-			return respostaOK("Arquivo salvo em: " + destino)
-		}
+			debugLog.Printf(">> baixarSelecionados destino=%s itens=%d", pastaDestino, len(arquivos))
 
-		nomeZip := fmt.Sprintf("notas-%s.zip", time.Now().Format("20060102-1504"))
-		caminhoZip := filepath.Join(pastaDestino, nomeZip)
-		if err := criarZip(caminhoZip, arquivos); err != nil {
-			debugLog.Printf("<< baixarSelecionados erro: %v", err)
-			return respostaErro(err.Error())
-		}
-		debugLog.Printf("<< baixarSelecionados ok (zip)")
-		return respostaOK(fmt.Sprintf("ZIP com %d arquivo(s) criado em: %s", len(arquivos), caminhoZip))
+			if len(arquivos) == 1 {
+				destino := filepath.Join(pastaDestino, filepath.Base(arquivos[0]))
+				if err := copiarArquivo(arquivos[0], destino); err != nil {
+					debugLog.Printf("<< baixarSelecionados erro: %v", err)
+					resolverAsync(id, respostaErro(err.Error()))
+					return
+				}
+				debugLog.Printf("<< baixarSelecionados ok (arquivo único)")
+				resolverAsync(id, respostaOK("Arquivo salvo em: "+destino))
+				return
+			}
+
+			nomeZip := fmt.Sprintf("notas-%s.zip", time.Now().Format("20060102-1504"))
+			caminhoZip := filepath.Join(pastaDestino, nomeZip)
+			if err := criarZip(caminhoZip, arquivos); err != nil {
+				debugLog.Printf("<< baixarSelecionados erro: %v", err)
+				resolverAsync(id, respostaErro(err.Error()))
+				return
+			}
+			debugLog.Printf("<< baixarSelecionados ok (zip)")
+			resolverAsync(id, respostaOK(fmt.Sprintf("ZIP com %d arquivo(s) criado em: %s", len(arquivos), caminhoZip)))
+		}()
 	})
 
 	w.Bind("obterBuscaAutomatica", func() bool {
@@ -304,6 +359,7 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 			"cUFAutor":        cfg.CUFAutor,
 			"certificado_pfx": cfg.CertificadoPfx,
 			"pasta_saida":     cfg.PastaSaida,
+			"ambiente":        cfg.Ambiente,
 		})
 		return string(b)
 	})
@@ -315,6 +371,7 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 			CertificadoPfx   string `json:"certificado_pfx"`
 			CertificadoSenha string `json:"certificado_senha"`
 			PastaSaida       string `json:"pasta_saida"`
+			Ambiente         string `json:"ambiente"`
 		}
 		if err := json.Unmarshal([]byte(cfgJSON), &entrada); err != nil {
 			return respostaErro("dados inválidos: " + err.Error())
@@ -325,6 +382,7 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 		novoCfg.CUFAutor = entrada.CUFAutor
 		novoCfg.CertificadoPfx = entrada.CertificadoPfx
 		novoCfg.PastaSaida = entrada.PastaSaida
+		novoCfg.Ambiente = entrada.Ambiente
 		if strings.TrimSpace(entrada.CertificadoSenha) != "" {
 			novoCfg.CertificadoSenha = entrada.CertificadoSenha
 		}
@@ -350,13 +408,22 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 	})
 
 	w.Bind("abrirPasta", func(caminho string) {
-		// /select, marca o arquivo dentro do Explorer, já mostrando a
-		// pasta certa — sem precisar navegar manualmente. SEM aspas em
-		// volta do caminho, o explorer.exe erra o parse assim que o nome
-		// do arquivo tem vírgula ou espaço (ex: "R$ 223.136,71" no nome
-		// padrão de arquivo) e abre a pasta padrão (Documentos) em vez do
-		// caminho certo — bug real reportado, corrigido aqui.
-		exec.Command("explorer", `/select,"`+caminho+`"`).Start()
+		// /select, marca o arquivo dentro do Explorer, já mostrando a pasta
+		// certa — sem precisar navegar manualmente. O bug reportado ("abre
+		// pasta genérica pra QUALQUER nota, não só as com vírgula no nome")
+		// era causado justamente pela tentativa anterior de correção: aspas
+		// manuais ao redor do caminho (`/select,"`+caminho+`"`) fazem o
+		// próprio exec.Command do Go, ao montar a linha de comando pro
+		// Windows, escapar essas aspas literais (viram \" — regra de quoting
+		// do MSVCRT que o Go segue), e o explorer.exe recebe um argumento
+		// com barras invertidas + aspas soltas no meio do caminho, que ele
+		// não reconhece como delimitador de nada. O jeito certo é NÃO
+		// colocar aspas manualmente — o exec.Command do Go já aplica a
+		// quoting correta sozinho (só entre aspas quando precisa, ex:
+		// caminho com espaço/vírgula) exatamente no formato que o
+		// CommandLineToArgvW (e por extensão o parser do explorer.exe)
+		// espera.
+		exec.Command("explorer", "/select,"+caminho).Start()
 	})
 
 	w.Bind("escolherArquivo", func() string {
@@ -595,6 +662,47 @@ func adicionarAoZip(zw *zip.Writer, caminho string) error {
 	}
 	_, err = io.Copy(w, src)
 	return err
+}
+
+func diagnosticoNFSe(resumo coletansfe.Resumo) string {
+	if resumo.Paginas == 0 {
+		return "NFS-e: a consulta ao ADN não chegou a completar nenhuma página; veja o erro acima."
+	}
+
+	totalUtil := resumo.Recebidas + resumo.Emitidas + resumo.Cancelamentos
+	partes := []string{
+		fmt.Sprintf("NFS-e: ambiente=%s", valorOuTraco(resumo.TipoAmbiente)),
+		fmt.Sprintf("status=%s", valorOuTraco(resumo.StatusProcessamento)),
+		fmt.Sprintf("recebidas=%d", resumo.Recebidas),
+		fmt.Sprintf("emitidas=%d", resumo.Emitidas),
+		fmt.Sprintf("cancelamentos=%d", resumo.Cancelamentos),
+		fmt.Sprintf("checkpoint=%d", resumo.NSU),
+	}
+	if resumo.Outras > 0 {
+		partes = append(partes, fmt.Sprintf("%d XML(s) ignorado(s) porque o CNPJ do XML não bateu com o CNPJ configurado", resumo.Outras))
+	}
+	if resumo.OutrosTipos > 0 {
+		partes = append(partes, fmt.Sprintf("%d documento(s) de tipo não-NFSe ignorado(s)", resumo.OutrosTipos))
+	}
+	if len(resumo.Alertas) > 0 {
+		partes = append(partes, "alertas="+strings.Join(resumo.Alertas, " | "))
+	}
+	if len(resumo.ErrosAPI) > 0 {
+		partes = append(partes, "erros ADN="+strings.Join(resumo.ErrosAPI, " | "))
+	}
+
+	if totalUtil == 0 && resumo.Outras == 0 && resumo.OutrosTipos == 0 && resumo.Erros == 0 {
+		return strings.Join(partes, "; ") + ". Nenhuma NFS-e nova veio para este CNPJ/ambiente/checkpoint."
+	}
+	return strings.Join(partes, "; ") + "."
+}
+
+func valorOuTraco(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "-"
+	}
+	return s
 }
 
 func respostaOK(msg string) string {

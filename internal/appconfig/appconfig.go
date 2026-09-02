@@ -31,6 +31,46 @@ type Config struct {
 	// chamada nenhuma na API da SEFAZ. O usuário liga isso explicitamente
 	// pelo botão na aba Notas quando quiser.
 	AutoBuscarAoAbrir bool `json:"auto_buscar_ao_abrir"`
+	// Ambiente escolhe entre os webservices de PRODUÇÃO (dado real, conta
+	// pra cota/"Consumo Indevido" de verdade) e HOMOLOGAÇÃO (dado fictício
+	// da própria SEFAZ, pra testar mudanças no programa sem risco). Zero
+	// value ("") é de propósito produção — configs antigas sem esse campo
+	// continuam se comportando exatamente como hoje. Ver EhHomologacao() e
+	// PastaEfetiva().
+	Ambiente string `json:"ambiente"`
+}
+
+const (
+	AmbienteProducao    = "producao"
+	AmbienteHomologacao = "homologacao"
+)
+
+// EhHomologacao diz se essa config está apontando pro ambiente de teste da
+// SEFAZ (dado fictício, endpoints "hom"/"producaorestrita").
+func (c Config) EhHomologacao() bool {
+	return c.Ambiente == AmbienteHomologacao
+}
+
+// TpAmb é o valor que entra no XML (<tpAmb>) mandado pra SEFAZ: 1=produção,
+// 2=homologação — mesmo código em qualquer webservice do padrão nacional.
+func (c Config) TpAmb() string {
+	if c.EhHomologacao() {
+		return "2"
+	}
+	return "1"
+}
+
+// PastaEfetiva é a pasta que os coletores e o catálogo devem usar de
+// verdade — em homologação, é uma SUBPASTA isolada de PastaSaida
+// ("_HOMOLOGACAO"), nunca a pasta principal. Isso garante que dado de teste
+// (fictício) nunca se mistura com nota fiscal real, mesmo que o usuário
+// esqueça de escolher uma pasta diferente ao trocar de ambiente — a
+// separação é automática, não depende de disciplina manual.
+func (c Config) PastaEfetiva() string {
+	if c.EhHomologacao() {
+		return filepath.Join(c.PastaSaida, "_HOMOLOGACAO")
+	}
+	return c.PastaSaida
 }
 
 // PastaControle é onde ficam o executável, config.json, catálogo,

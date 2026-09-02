@@ -21,21 +21,34 @@ import (
 )
 
 const urlProducao = "https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx"
+
+// urlHomologacao — a URL antiga (hom.nfe.fazenda.gov.br) foi desativada em
+// 2022-05-23; essa é a substituta oficial atual.
+const urlHomologacao = "https://hom1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx"
 const soapAction = "http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe/nfeDistDFeInteresse"
 
 type Client struct {
 	HTTPClient *http.Client
+	url        string
+	tpAmb      string
 }
 
 // NewClient monta um client autenticado a partir de um certificado .pfx
 // (senha em texto). Funciona igual em Linux e Windows — não depende de
-// OpenSSL nem de arquivo .pem pré-extraído.
-func NewClient(caminhoPfx, senhaPfx string) (*Client, error) {
+// OpenSSL nem de arquivo .pem pré-extraído. tpAmb é "1" (produção) ou "2"
+// (homologação) — ver appconfig.Config.TpAmb().
+func NewClient(caminhoPfx, senhaPfx, tpAmb string) (*Client, error) {
 	cert, err := certload.FromPFXValidado(caminhoPfx, senhaPfx)
 	if err != nil {
 		return nil, fmt.Errorf("carregar certificado: %w", err)
 	}
+	url := urlProducao
+	if tpAmb == "2" {
+		url = urlHomologacao
+	}
 	return &Client{
+		url:   url,
+		tpAmb: tpAmb,
 		HTTPClient: &http.Client{
 			Timeout: 30 * time.Second,
 			Transport: &http.Transport{
@@ -60,7 +73,7 @@ const envelopeTemplate = `<?xml version="1.0" encoding="utf-8"?>
     <nfeDistDFeInteresse xmlns="http://www.portalfiscal.inf.br/nfe/wsdl/NFeDistribuicaoDFe">
       <nfeDadosMsg>
         <distDFeInt xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.01">
-          <tpAmb>1</tpAmb>
+          <tpAmb>%s</tpAmb>
           <cUFAutor>%s</cUFAutor>
           <CNPJ>%s</CNPJ>
           %s
@@ -131,9 +144,9 @@ func (c *Client) BuscarPorChave(cUFAutor, cnpj, chave string) (Resultado, error)
 }
 
 func (c *Client) chamar(cUFAutor, cnpj, miolo string) (Resultado, error) {
-	body := fmt.Sprintf(envelopeTemplate, cUFAutor, cnpj, miolo)
+	body := fmt.Sprintf(envelopeTemplate, c.tpAmb, cUFAutor, cnpj, miolo)
 
-	req, err := http.NewRequest(http.MethodPost, urlProducao, bytes.NewBufferString(body))
+	req, err := http.NewRequest(http.MethodPost, c.url, bytes.NewBufferString(body))
 	if err != nil {
 		return Resultado{}, fmt.Errorf("criar request: %w", err)
 	}

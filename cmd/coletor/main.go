@@ -163,7 +163,7 @@ func rodarColeta(cfg appconfig.Config) {
 	// disparo chamaria a API de novo à toa — não é o "Consumo Indevido"
 	// (esse vem de reiniciar o NSU do zero), mas é uma chamada desnecessária
 	// mesmo assim.
-	pastaControle := appconfig.PastaControle(cfg.PastaSaida)
+	pastaControle := appconfig.PastaControle(cfg.PastaEfetiva())
 	_ = os.MkdirAll(pastaControle, 0o755)
 	marcador := filepath.Join(pastaControle, ".ultima-coleta-sucesso")
 	hoje := time.Now().Format("2006-01-02")
@@ -174,15 +174,41 @@ func rodarColeta(cfg appconfig.Config) {
 		return
 	}
 
-	if _, err := coletanfe.Run(cfg); err != nil {
+	teveErro := false
+	resumoNFe, err := coletanfe.Run(cfg)
+	if err != nil {
 		log.Printf("coleta de NFe: %v", err)
+		teveErro = true
+	}
+	if nfeRejeitada(resumoNFe) || resumoNFe.Erros > 0 {
+		log.Printf("coleta de NFe terminou com problema operacional: cStat=%s motivo=%s erros=%d", resumoNFe.CStat, resumoNFe.XMotivo, resumoNFe.Erros)
+		teveErro = true
 	}
 
-	if _, err := coletansfe.Run(cfg); err != nil {
+	resumoNFSe, err := coletansfe.Run(cfg)
+	if err != nil {
 		log.Printf("coleta de NFSe: %v", err)
+		teveErro = true
+	}
+	if resumoNFSe.Erros > 0 || len(resumoNFSe.ErrosAPI) > 0 {
+		log.Printf("coleta de NFSe terminou com problema operacional: erros=%d errosADN=%d status=%s", resumoNFSe.Erros, len(resumoNFSe.ErrosAPI), resumoNFSe.StatusProcessamento)
+		teveErro = true
+	}
+
+	if teveErro {
+		log.Println("Coleta terminou com erro — não vou gravar marcador de sucesso de hoje.")
+		log.Println("Assim, a próxima execução agendada ainda pode tentar novamente.")
+		return
 	}
 
 	if err := os.WriteFile(marcador, []byte(hoje), 0o644); err != nil {
 		log.Printf("aviso: não consegui gravar marcador de última coleta: %v", err)
 	}
+}
+
+func nfeRejeitada(resumo coletanfe.Resumo) bool {
+	if resumo.CStat == "" {
+		return false
+	}
+	return resumo.CStat != "137" && resumo.CStat != "138"
 }

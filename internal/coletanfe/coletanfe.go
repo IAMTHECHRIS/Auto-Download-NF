@@ -70,9 +70,9 @@ func gerarDANFEAoLado(caminhoXML string, xmlBytes []byte) {
 // aquele, sem mexer no checkpoint/NSU da varredura diária. Grava o
 // documento e registra no catálogo do mesmo jeito que a coleta normal.
 func BuscarUma(cfg appconfig.Config, chave string) (document.Document, string, error) {
-	outDir := filepath.Join(cfg.PastaSaida, "NFE", "NFE_COMPRAS")
+	outDir := filepath.Join(cfg.PastaEfetiva(), "NFE", "NFE_COMPRAS")
 
-	client, err := nfedist.NewClient(cfg.CertificadoPfx, cfg.CertificadoSenha)
+	client, err := nfedist.NewClient(cfg.CertificadoPfx, cfg.CertificadoSenha, cfg.TpAmb())
 	if err != nil {
 		return document.Document{}, "", fmt.Errorf("criar client: %w", err)
 	}
@@ -122,11 +122,27 @@ func BuscarUma(cfg appconfig.Config, chave string) (document.Document, string, e
 		return document.Document{}, "", fmt.Errorf("essa chave não é de uma NFe (schema retornado: %s) — pode ser um evento de cancelamento", docZip.Schema)
 	}
 
+	// Se essa nota já existe no catálogo (ex: chegou antes na coleta em lote
+	// como resNFe — resumo, sem itens/impostos suficientes pro DANFE), apaga
+	// o arquivo antigo ANTES de gravar o novo. Sem isso, como o nome
+	// determinístico (fornecedor+data+tipo+número+valor) é o MESMO, o
+	// organizer detecta "colisão" e cria um arquivo duplicado com sufixo
+	// "_chave-XXXXXX" em vez de substituir a versão resumida pela completa —
+	// bug real reportado (nome de arquivo saindo fora do padrão do projeto).
+	if existentes, errCat := catalogo.Listar(cfg.PastaEfetiva()); errCat == nil {
+		for _, ex := range existentes {
+			if ex.Chave == doc.Chave && ex.Caminho != "" {
+				_ = os.Remove(ex.Caminho)
+				break
+			}
+		}
+	}
+
 	caminho, err := organizer.PlaceDocumentPlano(outDir, doc, ".xml", xmlBytes)
 	if err != nil {
 		return document.Document{}, "", fmt.Errorf("gravar arquivo: %w", err)
 	}
-	if err := catalogo.Registrar(cfg.PastaSaida, doc, caminho); err != nil {
+	if err := catalogo.Registrar(cfg.PastaEfetiva(), doc, caminho); err != nil {
 		log.Printf("[NFe] aviso ao registrar no catálogo: %v", err)
 	}
 	if docZip.Schema == "procNFe_v4.00.xsd" {
@@ -179,14 +195,14 @@ func (r Resumo) EmDia() bool {
 
 func Run(cfg appconfig.Config) (Resumo, error) {
 	var resumo Resumo
-	outDir := filepath.Join(cfg.PastaSaida, "NFE", "NFE_COMPRAS")
-	pastaControle := appconfig.PastaControle(cfg.PastaSaida)
+	outDir := filepath.Join(cfg.PastaEfetiva(), "NFE", "NFE_COMPRAS")
+	pastaControle := appconfig.PastaControle(cfg.PastaEfetiva())
 	if err := os.MkdirAll(pastaControle, 0o755); err != nil {
 		return resumo, fmt.Errorf("criar pasta _Controle: %w", err)
 	}
 	checkpointPath := filepath.Join(pastaControle, ".checkpoint-nfedist-nsu")
 
-	client, err := nfedist.NewClient(cfg.CertificadoPfx, cfg.CertificadoSenha)
+	client, err := nfedist.NewClient(cfg.CertificadoPfx, cfg.CertificadoSenha, cfg.TpAmb())
 	if err != nil {
 		return resumo, fmt.Errorf("criar client: %w", err)
 	}
@@ -213,7 +229,7 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 	// cancelamento pra uma nota de uma rodada ANTERIOR não achava a nota
 	// original (só olhava as processadas NESTA rodada) e caía no caminho de
 	// "sem referência", perdendo a marcação de CANCELADO na nota certa.
-	if existentes, err := catalogo.Listar(cfg.PastaSaida); err != nil {
+	if existentes, err := catalogo.Listar(cfg.PastaEfetiva()); err != nil {
 		log.Printf("[NFe] aviso: não consegui pré-carregar o catálogo (seguindo sem isso): %v", err)
 	} else {
 		for _, ex := range existentes {
@@ -312,7 +328,7 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 					continue
 				}
 				processadas[doc.Chave] = registro{caminho: caminho, doc: doc}
-				if err := catalogo.Registrar(cfg.PastaSaida, doc, caminho); err != nil {
+				if err := catalogo.Registrar(cfg.PastaEfetiva(), doc, caminho); err != nil {
 					log.Printf("[NFe]   NSU %s: aviso ao registrar no catálogo: %v", docZip.NSU, err)
 				}
 				resumos++
@@ -336,7 +352,7 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 					continue
 				}
 				processadas[doc.Chave] = registro{caminho: caminho, doc: doc}
-				if err := catalogo.Registrar(cfg.PastaSaida, doc, caminho); err != nil {
+				if err := catalogo.Registrar(cfg.PastaEfetiva(), doc, caminho); err != nil {
 					log.Printf("[NFe]   NSU %s: aviso ao registrar no catálogo: %v", docZip.NSU, err)
 				}
 				gerarDANFEAoLado(caminho, xmlBytes)
@@ -368,7 +384,7 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 					reg.caminho = novoCaminho
 					reg.doc.Status = "CANCELADO"
 					processadas[ev.ChaveOriginal] = reg
-					if err := catalogo.Registrar(cfg.PastaSaida, reg.doc, reg.caminho); err != nil {
+					if err := catalogo.Registrar(cfg.PastaEfetiva(), reg.doc, reg.caminho); err != nil {
 						log.Printf("[NFe]   NSU %s: aviso ao registrar cancelamento no catálogo: %v", docZip.NSU, err)
 					}
 					cancelamentos++

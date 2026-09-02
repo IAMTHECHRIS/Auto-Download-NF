@@ -127,6 +127,7 @@ type nfseNacional struct {
 		DhProc string `xml:"dhProc"` // data/hora de processamento (fallback)
 		Emit   struct {
 			CNPJ  string `xml:"CNPJ"`
+			CPF   string `xml:"CPF"`
 			XNome string `xml:"xNome"` // prestador do serviço
 		} `xml:"emit"`
 		Valores struct {
@@ -140,6 +141,7 @@ type nfseNacional struct {
 				// em 2026-08-23 (erro na primeira versão deste parser).
 				Toma struct {
 					CNPJ  string `xml:"CNPJ"`
+					CPF   string `xml:"CPF"`
 					XNome string `xml:"xNome"` // tomador do serviço
 				} `xml:"toma"`
 			} `xml:"infDPS"`
@@ -188,22 +190,45 @@ func ParseNFSeNacional(raw []byte, meuCNPJ string) (Document, Direcao, error) {
 		return Document{}, "", fmt.Errorf("parse valor NFSe %q: %w", inf.Valores.VLiq, err)
 	}
 
+	meuDoc := somenteDigitos(meuCNPJ)
+	emitDoc := primeiroNaoVazio(somenteDigitos(inf.Emit.CNPJ), somenteDigitos(inf.Emit.CPF))
+	tomaDoc := primeiroNaoVazio(somenteDigitos(inf.DPS.InfDPS.Toma.CNPJ), somenteDigitos(inf.DPS.InfDPS.Toma.CPF))
+
 	direcao := DirecaoOutro
-	switch meuCNPJ {
-	case inf.DPS.InfDPS.Toma.CNPJ:
+	switch meuDoc {
+	case tomaDoc:
 		direcao = DirecaoRecebida
-	case inf.Emit.CNPJ:
+	case emitDoc:
 		direcao = DirecaoEmitida
 	}
 
 	return Document{
 		Tipo:          TipoNFES,
 		Fornecedor:    inf.Emit.XNome, // prestador — quem emitiu a nota
-		FornecedorDoc: inf.Emit.CNPJ,
+		FornecedorDoc: emitDoc,
 		Data:          dt,
 		Numero:        inf.NNFSe,
 		Valor:         valor,
 	}, direcao, nil
+}
+
+func somenteDigitos(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= '0' && r <= '9' {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func primeiroNaoVazio(valores ...string) string {
+	for _, v := range valores {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // --- Evento (cancelamento/correção de NFSe) ---

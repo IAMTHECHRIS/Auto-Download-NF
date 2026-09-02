@@ -203,6 +203,9 @@
     <div class="spinner"></div>
     <span>Carregando…</span>
   </div>
+  <div id="avisoHomologacao" style="display:none; background:var(--warn); color:#3a2400; text-align:center; font-weight:700; font-size:13px; padding:7px;">
+    ⚠ AMBIENTE DE HOMOLOGAÇÃO — dado fictício da SEFAZ, não são suas notas reais
+  </div>
   <header>
     <div class="header-top">
       <div>
@@ -336,6 +339,9 @@
       <button class="btn-secundario" onclick="marcarTodosFaltando(true)">Marcar todas</button>
       <button class="btn-secundario" onclick="marcarTodosFaltando(false)">Desmarcar</button>
       <span style="flex:1"></span>
+      <label style="display:flex; align-items:center; gap:5px; font-size:12px; font-weight:400; text-transform:none; color:var(--text); cursor:pointer;">
+        <input type="checkbox" id="chkVerificarComPdf"> Incluir PDF (quando existir)
+      </label>
       <button class="btn-principal" onclick="clicarGerarZip()">Gerar ZIP com selecionadas</button>
     </div>
     <main>
@@ -399,6 +405,20 @@
         </div>
       </div>
 
+      <div class="campo">
+        <label>Ambiente</label>
+        <select id="cfgAmbiente" onchange="atualizarAvisoAmbiente()">
+          <option value="">Produção (dado real)</option>
+          <option value="homologacao">Homologação (dado de teste da SEFAZ — pra testar o programa sem risco)</option>
+        </select>
+        <p class="explicacao" style="margin-top:6px;">
+          Em homologação, as notas ficam numa subpasta separada
+          (<code>_HOMOLOGACAO</code>) dentro da pasta de saída — nunca se
+          misturam com dado real. A SEFAZ devolve documentos fictícios
+          nesse ambiente, não as suas notas de verdade.
+        </p>
+      </div>
+
       <button class="btn-principal" onclick="clicarSalvarConfiguracao()">Salvar configuração</button>
       <button class="btn-link" onclick="clicarReconfigurar()">Refazer configuração do zero…</button>
       <div class="status-form" id="status-config"></div>
@@ -421,6 +441,33 @@
 let todasEntradas = [];
 let pastaVerificarEscolhida = '';
 let buscaAutomatica = false;
+
+// --- Ponte assíncrona pro lado Go ---
+// buscarAgora/buscarPorChave/verificarCopia/gerarZip/baixarSelecionados
+// rodam de verdade numa goroutine no Go (ver painel_windows.go) — elas não
+// retornam valor pro webview, só disparam o trabalho e devolvem na hora.
+// chamarAsync empacota isso numa Promise: registra um "resolver" com um id,
+// chama a função ligada passando esse id na frente dos argumentos normais,
+// e window.__resolverAsync (chamada pelo Go via w.Eval quando termina)
+// resolve a Promise certa. Sem isso, cada chamada de rede/disco pesado
+// travava a thread de mensagens do Windows inteira (bug "Não está
+// respondendo" durante "Buscando notas novas...").
+const _resolvers = new Map();
+let _resolverSeq = 0;
+function chamarAsync(nomeFuncaoGo, ...args) {
+  return new Promise((resolve) => {
+    const id = ++_resolverSeq;
+    _resolvers.set(id, resolve);
+    window[nomeFuncaoGo](id, ...args);
+  });
+}
+window.__resolverAsync = function (id, resultado) {
+  const resolve = _resolvers.get(id);
+  if (resolve) {
+    _resolvers.delete(id);
+    resolve(resultado);
+  }
+};
 
 // --- Seleção de download (XML/PDF) nas tabelas Entrada/Saída ---
 // Mapa caminho-do-XML -> {xml, pdf}. Compartilhado entre as duas abas (não
@@ -868,7 +915,7 @@ async function clicarBuscarAgora() {
   [status1, status2].forEach(s => { s.className = 'status-busca-texto'; s.textContent = 'Buscando notas novas...'; });
   mostrarCarregando('Buscando notas novas na SEFAZ... pode levar um tempinho, não feche o programa.');
 
-  const resultado = await window.buscarAgora();
+  const resultado = await chamarAsync('buscarAgora');
   const r = JSON.parse(resultado);
   await carregarCatalogo();
   esconderCarregando();
@@ -912,7 +959,7 @@ async function clicarBaixarSelecionados(sufixo) {
   status.textContent = 'Baixando...';
 
   const itens = Array.from(downloadSel.entries()).map(([caminho, s]) => ({ caminho, xml: s.xml, pdf: s.pdf }));
-  const resultado = await window.baixarSelecionados(JSON.stringify(itens), pasta);
+  const resultado = await chamarAsync('baixarSelecionados', JSON.stringify(itens), pasta);
   const r = JSON.parse(resultado);
 
   status.className = 'status-busca-texto ' + (r.ok ? 'ok' : 'erro');
@@ -949,7 +996,7 @@ async function clicarBaixarResultadoChave() {
   status.textContent = 'Baixando...';
 
   const itens = [{ caminho: chaveResultadoCaminho, xml, pdf }];
-  const resultado = await window.baixarSelecionados(JSON.stringify(itens), pasta);
+  const resultado = await chamarAsync('baixarSelecionados', JSON.stringify(itens), pasta);
   const r = JSON.parse(resultado);
 
   status.className = 'status-form ' + (r.ok ? 'ok' : 'erro');
@@ -972,7 +1019,7 @@ async function clicarBuscarPorChave() {
   status.textContent = 'Buscando na SEFAZ...';
   mostrarCarregando('Buscando essa nota na SEFAZ... não feche o programa.');
 
-  const resultado = await window.buscarPorChave(chave);
+  const resultado = await chamarAsync('buscarPorChave', chave);
   const r = JSON.parse(resultado);
   esconderCarregando();
 
@@ -1027,7 +1074,7 @@ async function clicarVerificarCopia() {
   status.className = 'status-form';
   status.textContent = 'Verificando...';
 
-  const resultado = await window.verificarCopia(pastaVerificarEscolhida);
+  const resultado = await chamarAsync('verificarCopia', pastaVerificarEscolhida);
   const r = JSON.parse(resultado);
 
   if (!r.ok) {
@@ -1111,7 +1158,8 @@ async function clicarGerarZip() {
   status.className = 'status-form';
   status.textContent = 'Gerando ZIP...';
 
-  const resultado = await window.gerarZip(JSON.stringify(Array.from(faltandoSelecionadas)), pastaVerificarEscolhida);
+  const comPdf = document.getElementById('chkVerificarComPdf').checked;
+  const resultado = await chamarAsync('gerarZip', JSON.stringify(Array.from(faltandoSelecionadas)), pastaVerificarEscolhida, comPdf);
   const r = JSON.parse(resultado);
 
   if (r.ok) {
@@ -1131,6 +1179,16 @@ async function atualizarFormConfiguracao() {
   document.getElementById('cfgCuf').value = c.cUFAutor || '35';
   document.getElementById('cfgPfx').value = c.certificado_pfx || '';
   document.getElementById('cfgPastaSaida').value = c.pasta_saida || '';
+  document.getElementById('cfgAmbiente').value = c.ambiente || '';
+  atualizarAvisoAmbiente();
+}
+
+// Banner fixo no topo — precisa ficar visível em QUALQUER aba, não só na de
+// Configuração, senão é fácil esquecer que os dados na tela são fictícios
+// (de teste) e confundir com nota real.
+function atualizarAvisoAmbiente() {
+  const ligado = document.getElementById('cfgAmbiente').value === 'homologacao';
+  document.getElementById('avisoHomologacao').style.display = ligado ? 'block' : 'none';
 }
 
 function clicarAlternarSenha() {
@@ -1158,6 +1216,7 @@ async function clicarSalvarConfiguracao() {
     certificado_pfx: document.getElementById('cfgPfx').value.trim(),
     certificado_senha: document.getElementById('cfgSenha').value,
     pasta_saida: document.getElementById('cfgPastaSaida').value.trim(),
+    ambiente: document.getElementById('cfgAmbiente').value,
   };
 
   status.className = 'status-form';
@@ -1170,6 +1229,7 @@ async function clicarSalvarConfiguracao() {
     status.className = 'status-form ok';
     status.textContent = r.mensagem;
     document.getElementById('cfgSenha').value = '';
+    atualizarAvisoAmbiente();
   } else {
     status.className = 'status-form erro';
     status.textContent = r.erro;
@@ -1209,7 +1269,17 @@ async function clicarDesinstalar() {
   }
 }
 
-Promise.all([carregarCatalogo(), iniciarToggleBusca()]).then(() => {
+// Carrega o ambiente já na abertura (não só ao entrar na aba Configuração)
+// pro banner de homologação aparecer na hora — sem isso, seria fácil abrir o
+// painel já em homologação e não perceber até entrar na aba errada.
+async function carregarAmbienteInicial() {
+  const resultado = await window.carregarConfiguracao();
+  const c = JSON.parse(resultado);
+  document.getElementById('cfgAmbiente').value = c.ambiente || '';
+  atualizarAvisoAmbiente();
+}
+
+Promise.all([carregarCatalogo(), iniciarToggleBusca(), carregarAmbienteInicial()]).then(() => {
   esconderCarregando();
   if (buscaAutomatica) clicarBuscarAgora();
 });
