@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 
 	"io-nf-automation/internal/appconfig"
 	"io-nf-automation/internal/catalogo"
@@ -36,6 +37,14 @@ const MaxPaginas = 50
 
 // geradorDANFE aparece no rodapé do PDF ("Gerado por ...").
 const geradorDANFE = "I.O NF Automation"
+
+// esperaEntreUpgrades espaça as consultas avulsas (consChNFe) que
+// upgradarParaCompleto dispara pra converter resNFe -> procNFe durante a
+// coleta em lote. Mesma cautela do painel (espacamentoMinimoChave): não
+// sabemos a cota exata que a SEFAZ tolera pra esse tipo de consulta pontual,
+// então evita disparar uma sequência rápida de N notas resumidas na mesma
+// rodada.
+const esperaEntreUpgrades = 3 * time.Second
 
 // docEmitente pega o CNPJ/CPF do emitente do próprio resNFe; se por algum
 // motivo o campo não vier, cai pro CNPJ embutido na chave de acesso (que
@@ -63,6 +72,64 @@ func gerarDANFEAoLado(caminhoXML string, xmlBytes []byte) {
 	if err := os.WriteFile(caminhoPDF, pdfBytes, 0o644); err != nil {
 		log.Printf("[NFe] aviso: não deu pra gravar o DANFE de %s: %v", filepath.Base(caminhoXML), err)
 	}
+}
+
+// upgradarParaCompleto tenta trocar um resNFe (resumo) pelo procNFe (nota
+// completa) da MESMA chave, consultando de novo o mesmo webservice em modo
+// consChNFe (BuscarPorChave) — é o único jeito de conseguir item/imposto
+// suficiente pra gerar o DANFE oficial, já que a distribuição em lote
+// (BuscarLote) às vezes só entrega o resumo. Bug real reportado: nota
+// baixada como resNFe nunca ganhava PDF, mesmo esperando a próxima coleta —
+// o resumo nunca "vira" completo sozinho, é preciso pedir de novo pela
+// chave.
+//
+// Nunca é fatal: se a consulta falhar, vier vazia, ou continuar vindo como
+// resumo, devolve ok=false e quem chamou segue com o resumo original (sem
+// DANFE, como já era o comportamento). ultimaConsulta é compartilhada entre
+// todas as chamadas de uma mesma rodada de Run(), pra respeitar
+// esperaEntreUpgrades mesmo com várias notas resumidas na mesma página.
+func upgradarParaCompleto(client *nfedist.Client, cfg appconfig.Config, chave string, ultimaConsulta *time.Time) (document.Document, []byte, bool) {
+	if !ultimaConsulta.IsZero() {
+		if espera := esperaEntreUpgrades - time.Since(*ultimaConsulta); espera > 0 {
+			time.Sleep(espera)
+		}
+	}
+	*ultimaConsulta = time.Now()
+
+	res, err := client.BuscarPorChave(cfg.CUFAutor, cfg.CNPJ, chave)
+	if err != nil {
+		log.Printf("[NFe]   upgrade pra completo (chave %s): consulta falhou: %v — mantendo resumo, sem DANFE", chave, err)
+		return document.Document{}, nil, false
+	}
+	if res.CStat != "138" && res.CStat != "137" {
+		log.Printf("[NFe]   upgrade pra completo (chave %s): SEFAZ recusou (cStat=%s: %s) — mantendo resumo, sem DANFE", chave, res.CStat, res.XMotivo)
+		return document.Document{}, nil, false
+	}
+	if len(res.Docs) == 0 {
+		log.Printf("[NFe]   upgrade pra completo (chave %s): consulta veio vazia — mantendo resumo, sem DANFE", chave)
+		return document.Document{}, nil, false
+	}
+
+	docZip := res.Docs[0]
+	if docZip.Schema != "procNFe_v4.00.xsd" {
+		// a SEFAZ pode continuar só devolvendo resumo pra essa chave (ex:
+		// não somos o destinatário direto) — não é erro, só não dá pra
+		// gerar DANFE dessa nota.
+		log.Printf("[NFe]   upgrade pra completo (chave %s): SEFAZ ainda devolveu %s, não procNFe — mantendo resumo, sem DANFE", chave, docZip.Schema)
+		return document.Document{}, nil, false
+	}
+
+	xmlBytes, err := nfedist.DecodeXML(docZip)
+	if err != nil {
+		log.Printf("[NFe]   upgrade pra completo (chave %s): erro ao decodificar: %v — mantendo resumo, sem DANFE", chave, err)
+		return document.Document{}, nil, false
+	}
+	doc, err := document.ParseNFe(xmlBytes)
+	if err != nil {
+		log.Printf("[NFe]   upgrade pra completo (chave %s): erro ao parsear procNFe: %v — mantendo resumo, sem DANFE", chave, err)
+		return document.Document{}, nil, false
+	}
+	return doc, xmlBytes, true
 }
 
 // BuscarUma pede UMA nota específica pela chave de acesso (44 dígitos) —
@@ -214,6 +281,7 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 	fmt.Printf("[NFe] Retomando a partir do NSU %d\n", nsu)
 
 	var resumos, eventos, outrosSchemas, erros, cancelamentos, semReferencia int
+	var ultimaConsultaUpgrade time.Time
 
 	type registro struct {
 		caminho string
@@ -321,7 +389,24 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 					fmt.Printf("[NFe]   NSU %s [resNFe] já existe (%s) -> pulando\n", docZip.NSU, reg.caminho)
 					continue
 				}
-				caminho, err := organizer.PlaceDocumentPlano(outDir, doc, ".xml", xmlBytes)
+				// resNFe é resumo — não tem item/imposto suficiente pro
+				// DANFE oficial. Antes disso ficava definitivo (a nota
+				// nunca ganhava PDF). Agora tenta upgradar pra procNFe
+				// (nota completa) na hora, pela mesma chave — se conseguir,
+				// grava a versão completa (e o DANFE junto) em vez do
+				// resumo. Notas já canceladas não precisam de DANFE, então
+				// pulam a consulta extra.
+				xmlParaGravar := xmlBytes
+				schemaGravado := docZip.Schema
+				if !cancelada {
+					if completo, xmlCompleto, ok := upgradarParaCompleto(client, cfg, chave, &ultimaConsultaUpgrade); ok {
+						doc = completo
+						xmlParaGravar = xmlCompleto
+						schemaGravado = "procNFe_v4.00.xsd"
+					}
+				}
+
+				caminho, err := organizer.PlaceDocumentPlano(outDir, doc, ".xml", xmlParaGravar)
 				if err != nil {
 					log.Printf("[NFe]   NSU %s: erro ao gravar: %v", docZip.NSU, err)
 					erros++
@@ -331,8 +416,14 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 				if err := catalogo.Registrar(cfg.PastaEfetiva(), doc, caminho); err != nil {
 					log.Printf("[NFe]   NSU %s: aviso ao registrar no catálogo: %v", docZip.NSU, err)
 				}
-				resumos++
-				fmt.Printf("[NFe]   NSU %s [resNFe] -> %s\n", docZip.NSU, caminho)
+				if schemaGravado == "procNFe_v4.00.xsd" {
+					gerarDANFEAoLado(caminho, xmlParaGravar)
+					resumos++
+					fmt.Printf("[NFe]   NSU %s [resNFe -> upgrade completo] -> %s\n", docZip.NSU, caminho)
+				} else {
+					resumos++
+					fmt.Printf("[NFe]   NSU %s [resNFe] -> %s\n", docZip.NSU, caminho)
+				}
 
 			case "procNFe_v4.00.xsd":
 				doc, err := document.ParseNFe(xmlBytes)
