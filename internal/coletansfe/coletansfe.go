@@ -116,14 +116,17 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 		resumo.StatusProcessamento = resp.StatusProcessamento
 		resumo.TipoAmbiente = resp.TipoAmbiente
 		resumo.Alertas = append(resumo.Alertas, resp.Alertas...)
-		resumo.ErrosAPI = append(resumo.ErrosAPI, resp.Erros...)
+		fimSemDocumento := len(resp.LoteDFe) == 0 && resp.StatusProcessamento == "NENHUM_DOCUMENTO_LOCALIZADO"
+		if !fimSemDocumento {
+			resumo.ErrosAPI = append(resumo.ErrosAPI, resp.Erros...)
+		}
 
 		fmt.Printf("[NFSe] Página %d — NSU inicial %d — ambiente: %s — status: %s — %d documentos\n",
 			pagina+1, nsu, resp.TipoAmbiente, resp.StatusProcessamento, len(resp.LoteDFe))
 		if len(resp.Alertas) > 0 {
 			log.Printf("[NFSe] alertas ADN: %s", strings.Join(resp.Alertas, " | "))
 		}
-		if len(resp.Erros) > 0 {
+		if len(resp.Erros) > 0 && !fimSemDocumento {
 			log.Printf("[NFSe] erros ADN: %s", strings.Join(resp.Erros, " | "))
 			erros += len(resp.Erros)
 			resumo.Erros = erros

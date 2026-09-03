@@ -41,6 +41,7 @@ func main() {
 	client := &http.Client{
 		Timeout: 45 * time.Second,
 		Transport: &http.Transport{
+			Proxy:             http.ProxyFromEnvironment,
 			ForceAttemptHTTP2: false,
 			TLSNextProto:      map[string]func(string, *tls.Conn) http.RoundTripper{},
 			TLSClientConfig:   tlsCfg,

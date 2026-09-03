@@ -297,6 +297,17 @@
       <button class="btn-principal" id="btnBuscarChave" onclick="clicarBuscarPorChave()">Buscar essa nota</button>
       <div class="status-form" id="status-chave"></div>
 
+      <div class="campo" style="margin-top:24px;">
+        <label>Recuperar XMLs apagados</label>
+        <p class="explicacao" style="margin:0 0 10px;">
+          Usa as chaves já salvas no catálogo para rebaixar NF-e de compra cujo
+          arquivo XML não existe mais. Não zera NSU e não reinicia a fila da SEFAZ.
+          Por segurança, recupera no máximo 20 por rodada.
+        </p>
+        <button class="btn-secundario" id="btnRecuperarCatalogo" onclick="clicarRecuperarCatalogo()">Recuperar pelo catálogo</button>
+        <div class="status-form" id="status-recuperar"></div>
+      </div>
+
       <div class="campo" id="resultadoChaveBox" style="display:none; margin-top:18px;">
         <label>Baixar esta nota</label>
         <div style="display:flex; align-items:center; gap:16px;">
@@ -1038,6 +1049,27 @@ async function clicarBuscarPorChave() {
     status.textContent = r.erro;
     document.getElementById('resultadoChaveBox').style.display = 'none';
   }
+  btn.disabled = false;
+}
+
+async function clicarRecuperarCatalogo() {
+  const btn = document.getElementById('btnRecuperarCatalogo');
+  const status = document.getElementById('status-recuperar');
+
+  btn.disabled = true;
+  status.className = 'status-form';
+  status.textContent = 'Recuperando XMLs faltantes pelo catálogo...';
+  mostrarCarregando('Recuperando XMLs do catálogo... não feche o programa.');
+
+  const resultado = await chamarAsync('recuperarCatalogo');
+  const r = JSON.parse(resultado);
+  await carregarCatalogo();
+  esconderCarregando();
+
+  let texto = r.mensagem || (r.ok ? 'Recuperação concluída.' : 'Erro na recuperação.');
+  if (r.erros && r.erros.length) texto += ' Erros: ' + r.erros.join(' | ');
+  status.className = 'status-form ' + (r.ok ? 'ok' : 'erro');
+  status.textContent = texto;
   btn.disabled = false;
 }
 

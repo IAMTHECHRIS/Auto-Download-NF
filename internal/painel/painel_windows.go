@@ -224,6 +224,27 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 		}()
 	})
 
+	w.Bind("recuperarCatalogo", func(id int) {
+		go func() {
+			debugLog.Printf(">> recuperarCatalogo")
+			resumo := coletanfe.RecuperarArquivosDoCatalogo(cfg)
+			debugLog.Printf("<< recuperarCatalogo resumo=%+v", resumo)
+			msg := fmt.Sprintf(
+				"Recuperação pelo catálogo: %d candidata(s), %d já existia(m), %d recuperada(s), %d pulada(s).",
+				resumo.Candidatas, resumo.Existentes, resumo.Recuperadas, resumo.Puladas,
+			)
+			if resumo.Limitado {
+				msg += fmt.Sprintf(" Limitei em %d por rodada por segurança; rode de novo depois se ainda faltar.", coletanfe.MaxRecuperacoesPorRodada)
+			}
+			b, _ := json.Marshal(map[string]any{
+				"ok":       len(resumo.Erros) == 0,
+				"mensagem": msg,
+				"erros":    resumo.Erros,
+			})
+			resolverAsync(id, string(b))
+		}()
+	})
+
 	// pastaDestino agora é escolhida NA HORA pelo usuário (botão "Procurar"
 	// na própria aba Verificar cópia), não fica salva no config.json — o
 	// usuário pode querer checar contra pastas diferentes em momentos

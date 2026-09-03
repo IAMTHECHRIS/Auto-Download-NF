@@ -38,6 +38,20 @@ const MaxPaginas = 50
 // geradorDANFE aparece no rodapé do PDF ("Gerado por ...").
 const geradorDANFE = "I.O NF Automation"
 
+// MaxRecuperacoesPorRodada limita a recomposição por chave. Busca por chave
+// não reinicia NSU, mas ainda é chamada real na SEFAZ; manter lote pequeno
+// evita transformar uma recuperação de teste em rajada.
+const MaxRecuperacoesPorRodada = 20
+
+type ResumoRecuperacao struct {
+	Candidatas  int
+	Existentes  int
+	Recuperadas int
+	Puladas     int
+	Erros       []string
+	Limitado    bool
+}
+
 // esperaEntreUpgrades espaça as consultas avulsas (consChNFe) que
 // upgradarParaCompleto dispara pra converter resNFe -> procNFe durante a
 // coleta em lote. Mesma cautela do painel (espacamentoMinimoChave): não
@@ -225,6 +239,59 @@ func BuscarUma(cfg appconfig.Config, chave string) (document.Document, string, e
 	return doc, caminho, nil
 }
 
+// RecuperarArquivosDoCatalogo recompõe XMLs apagados usando as chaves que
+// ainda existem no catálogo local. É o caminho seguro para testes em que o
+// usuário apagou a pasta de notas: consulta por chave, não por NSU, então não
+// volta o checkpoint sequencial nem reinicia a distribuição do zero.
+func RecuperarArquivosDoCatalogo(cfg appconfig.Config) ResumoRecuperacao {
+	var resumo ResumoRecuperacao
+
+	entradas, err := catalogo.Listar(cfg.PastaEfetiva())
+	if err != nil {
+		resumo.Erros = append(resumo.Erros, "ler catálogo: "+err.Error())
+		return resumo
+	}
+
+	var ultimaConsulta time.Time
+	for _, entrada := range entradas {
+		if entrada.Tipo != string(document.TipoNFEC) {
+			continue
+		}
+		if strings.TrimSpace(entrada.Chave) == "" {
+			continue
+		}
+		resumo.Candidatas++
+
+		if entrada.Caminho != "" {
+			if _, err := os.Stat(entrada.Caminho); err == nil {
+				resumo.Existentes++
+				continue
+			}
+		}
+
+		if resumo.Recuperadas >= MaxRecuperacoesPorRodada {
+			resumo.Limitado = true
+			resumo.Puladas++
+			continue
+		}
+
+		if !ultimaConsulta.IsZero() {
+			if espera := esperaEntreUpgrades - time.Since(ultimaConsulta); espera > 0 {
+				time.Sleep(espera)
+			}
+		}
+		ultimaConsulta = time.Now()
+
+		if _, _, err := BuscarUma(cfg, entrada.Chave); err != nil {
+			resumo.Erros = append(resumo.Erros, fmt.Sprintf("%s: %v", entrada.Chave, err))
+			continue
+		}
+		resumo.Recuperadas++
+	}
+
+	return resumo
+}
+
 // Resumo é o resultado estruturado de uma rodada de Run() — existe pro
 // painel conseguir mostrar um diagnóstico de verdade ("0 notas novas
 // porque já está em dia" vs "0 notas novas porque parou no meio do
@@ -349,14 +416,14 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 			// não vira loop se a SEFAZ continuar rejeitando por outro motivo.
 			if !resumo.AutoCorrigido {
 				if nsuRevelado, convErr := strconv.Atoi(res.UltNSU); convErr == nil && nsuRevelado > nsu {
-					log.Printf("[NFe] rejeitado (cStat=%s: %s) — SEFAZ revelou NSU %d, semeando checkpoint e tentando de novo", res.CStat, res.XMotivo, nsuRevelado)
+					log.Printf("[NFe] rejeitado (cStat=%s: %s) — SEFAZ revelou NSU %d; checkpoint semeado. Parando agora para respeitar a janela da SEFAZ.", res.CStat, res.XMotivo, nsuRevelado)
 					nsu = nsuRevelado
 					if err := nfedist.SalvarCheckpoint(checkpointPath, nsu); err != nil {
 						log.Printf("[NFe] erro ao salvar checkpoint corrigido: %v", err)
 					}
 					resumo.AutoCorrigido = true
 					resumo.NSUAutoCorrigido = nsu
-					continue
+					break
 				}
 			}
 			log.Printf("[NFe] cStat inesperado, parando por segurança: %s — %s", res.CStat, res.XMotivo)

@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"io-nf-automation/internal/certload"
@@ -30,6 +31,9 @@ const baseURLHomologacao = "https://adn.producaorestrita.nfse.gov.br/contribuint
 type Client struct {
 	baseURL    string
 	HTTPClient *http.Client
+	cert       tls.Certificate
+	pfxPath    string
+	pfxSenha   string
 }
 
 // NewClient monta um client autenticado direto a partir do .pfx original —
@@ -43,6 +47,7 @@ func NewClient(caminhoPfx, senhaPfx, tpAmb string) (*Client, error) {
 	}
 
 	transport := &http.Transport{
+		Proxy:             http.ProxyFromEnvironment,
 		ForceAttemptHTTP2: false,
 		TLSNextProto:      map[string]func(string, *tls.Conn) http.RoundTripper{},
 		TLSClientConfig: &tls.Config{
@@ -57,7 +62,10 @@ func NewClient(caminhoPfx, senhaPfx, tpAmb string) (*Client, error) {
 	}
 
 	return &Client{
-		baseURL: baseURL,
+		baseURL:  baseURL,
+		cert:     cert,
+		pfxPath:  caminhoPfx,
+		pfxSenha: senhaPfx,
 		HTTPClient: &http.Client{
 			Timeout:   30 * time.Second,
 			Transport: transport,
@@ -135,13 +143,16 @@ func (c *Client) BuscarLote(nsu int) (DFeResponse, error) {
 	backoff := 3 * time.Second
 
 	for tentativa := 1; tentativa <= maxTentativas429; tentativa++ {
-		resp, err := c.HTTPClient.Get(endpoint)
+		body, statusCode, err := c.getComFallback(endpoint)
 		if err != nil {
-			return DFeResponse{}, fmt.Errorf("chamar ADN falhou na comunicação TLS/rede (sem retry automático): %w", err)
+			if tentativa < 3 && erroComunicacaoTLS(err) {
+				time.Sleep(time.Duration(tentativa) * 2 * time.Second)
+				continue
+			}
+			return DFeResponse{}, err
 		}
 
-		if resp.StatusCode == http.StatusTooManyRequests {
-			resp.Body.Close()
+		if statusCode == http.StatusTooManyRequests {
 			if tentativa == maxTentativas429 {
 				return DFeResponse{}, fmt.Errorf("ADN: rate limit persistente após %d tentativas", maxTentativas429)
 			}
@@ -150,30 +161,32 @@ func (c *Client) BuscarLote(nsu int) (DFeResponse, error) {
 			continue
 		}
 
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return DFeResponse{}, fmt.Errorf("ler resposta ADN: %w", err)
-		}
-
 		var out DFeResponse
 		if len(body) > 0 {
 			if err := json.Unmarshal(body, &out); err != nil {
-				return DFeResponse{}, fmt.Errorf("decodificar resposta ADN: %w", err)
+				return DFeResponse{}, fmt.Errorf("decodificar resposta ADN: %w; status=%d; trecho=%q", err, statusCode, trechoResposta(body, 500))
 			}
 		}
 
-		if resp.StatusCode != http.StatusOK {
-			if resp.StatusCode == http.StatusNotFound && out.StatusProcessamento == "NENHUM_DOCUMENTO_LOCALIZADO" {
+		if statusCode != http.StatusOK {
+			if statusCode == http.StatusNotFound && out.StatusProcessamento == "NENHUM_DOCUMENTO_LOCALIZADO" {
 				return out, nil
 			}
-			return DFeResponse{}, fmt.Errorf("ADN retornou status %d: %s", resp.StatusCode, body)
+			return DFeResponse{}, fmt.Errorf("ADN retornou status %d: %s", statusCode, body)
 		}
 
 		return out, nil
 	}
 
 	return DFeResponse{}, fmt.Errorf("BuscarLote: não deveria chegar aqui")
+}
+
+func trechoResposta(body []byte, limite int) string {
+	texto := strings.TrimSpace(string(body))
+	if len(texto) <= limite {
+		return texto
+	}
+	return texto[:limite] + "..."
 }
 
 // DecodeXML desfaz o base64+gzip do campo ArquivoXml e devolve o XML puro.
