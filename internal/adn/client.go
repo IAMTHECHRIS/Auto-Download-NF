@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"io-nf-automation/internal/certload"
@@ -77,9 +78,44 @@ type DFeItem struct {
 type DFeResponse struct {
 	StatusProcessamento string    `json:"StatusProcessamento"`
 	LoteDFe             []DFeItem `json:"LoteDFe"`
-	Alertas             []string  `json:"Alertas"`
-	Erros               []string  `json:"Erros"`
+	Alertas             mensagens `json:"Alertas"`
+	Erros               mensagens `json:"Erros"`
 	TipoAmbiente        string    `json:"TipoAmbiente"`
+}
+
+type mensagens []string
+
+func (m *mensagens) UnmarshalJSON(data []byte) error {
+	var textos []string
+	if err := json.Unmarshal(data, &textos); err == nil {
+		*m = textos
+		return nil
+	}
+
+	var objetos []struct {
+		Codigo    string          `json:"Codigo"`
+		Descricao string          `json:"Descricao"`
+		Mensagem  json.RawMessage `json:"Mensagem"`
+	}
+	if err := json.Unmarshal(data, &objetos); err != nil {
+		return err
+	}
+
+	out := make([]string, 0, len(objetos))
+	for _, obj := range objetos {
+		switch {
+		case obj.Codigo != "" && obj.Descricao != "":
+			out = append(out, obj.Codigo+": "+obj.Descricao)
+		case obj.Descricao != "":
+			out = append(out, obj.Descricao)
+		case obj.Codigo != "":
+			out = append(out, obj.Codigo)
+		case len(obj.Mensagem) > 0 && string(obj.Mensagem) != "{}":
+			out = append(out, string(obj.Mensagem))
+		}
+	}
+	*m = out
+	return nil
 }
 
 // BuscarLote pede o lote de documentos a partir do NSU informado. A API
@@ -89,13 +125,17 @@ type DFeResponse struct {
 // tentativa é mais seguro: a ADN nem devolveu JSON, e insistir pode confundir
 // operação e diagnóstico.
 func (c *Client) BuscarLote(nsu int) (DFeResponse, error) {
-	url := fmt.Sprintf("%s/DFe/%d", c.baseURL, nsu)
+	endpoint := fmt.Sprintf("%s/DFe/%d", c.baseURL, nsu)
+	params := url.Values{}
+	params.Set("tipoNSU", "DISTRIBUICAO")
+	params.Set("lote", "true")
+	endpoint += "?" + params.Encode()
 
 	const maxTentativas429 = 5
 	backoff := 3 * time.Second
 
 	for tentativa := 1; tentativa <= maxTentativas429; tentativa++ {
-		resp, err := c.HTTPClient.Get(url)
+		resp, err := c.HTTPClient.Get(endpoint)
 		if err != nil {
 			return DFeResponse{}, fmt.Errorf("chamar ADN falhou na comunicação TLS/rede (sem retry automático): %w", err)
 		}
@@ -110,16 +150,24 @@ func (c *Client) BuscarLote(nsu int) (DFeResponse, error) {
 			continue
 		}
 
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			body, _ := io.ReadAll(resp.Body)
-			return DFeResponse{}, fmt.Errorf("ADN retornou status %d: %s", resp.StatusCode, body)
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return DFeResponse{}, fmt.Errorf("ler resposta ADN: %w", err)
 		}
 
 		var out DFeResponse
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-			return DFeResponse{}, fmt.Errorf("decodificar resposta ADN: %w", err)
+		if len(body) > 0 {
+			if err := json.Unmarshal(body, &out); err != nil {
+				return DFeResponse{}, fmt.Errorf("decodificar resposta ADN: %w", err)
+			}
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			if resp.StatusCode == http.StatusNotFound && out.StatusProcessamento == "NENHUM_DOCUMENTO_LOCALIZADO" {
+				return out, nil
+			}
+			return DFeResponse{}, fmt.Errorf("ADN retornou status %d: %s", resp.StatusCode, body)
 		}
 
 		return out, nil

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"io-nf-automation/internal/certload"
@@ -17,6 +18,7 @@ func main() {
 	senha := flag.String("senha", "", "senha do certificado")
 	nsu := flag.Int("nsu", 0, "NSU para teste")
 	base := flag.String("base", "https://adn.nfse.gov.br/contribuintes", "base URL ADN")
+	query := flag.String("query", "", "query string opcional, ex: tipoNSU=DISTRIBUICAO&lote=true")
 	tls12 := flag.Bool("tls12", false, "forçar TLS 1.2")
 	flag.Parse()
 
@@ -46,6 +48,9 @@ func main() {
 	}
 
 	url := fmt.Sprintf("%s/DFe/%d", *base, *nsu)
+	if strings.TrimSpace(*query) != "" {
+		url += "?" + strings.TrimPrefix(strings.TrimSpace(*query), "?")
+	}
 	fmt.Printf("GET %s\n", url)
 	resp, err := client.Get(url)
 	if err != nil {
