@@ -18,6 +18,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"io-nf-automation/internal/appconfig"
 )
@@ -52,7 +53,9 @@ func NecessarioRelocar(cfg appconfig.Config) (bool, error) {
 }
 
 // Relocar copia o executável atual pra dentro da pasta instalada e grava
-// uma cópia do config.json lá. Devolve o caminho do novo .exe.
+// uma cópia do config.json lá. Se a pasta já existia, trata como atualização
+// segura: preserva catálogo/checkpoints e faz backup dos arquivos de
+// controle sensíveis antes de sobrescrever o .exe/config.
 func Relocar(cfg appconfig.Config) (novoExe string, err error) {
 	exeAtual, err := os.Executable()
 	if err != nil {
@@ -60,8 +63,15 @@ func Relocar(cfg appconfig.Config) (novoExe string, err error) {
 	}
 
 	pastaInstalada := PastaInstalada(cfg)
+	instalacaoExistente := pastaExiste(pastaInstalada)
 	if err := os.MkdirAll(pastaInstalada, 0o755); err != nil {
 		return "", fmt.Errorf("criar pasta do programa: %w", err)
+	}
+
+	if instalacaoExistente {
+		if err := backupControleAntesDeAtualizar(pastaInstalada); err != nil {
+			return "", fmt.Errorf("backup de segurança antes da atualização: %w", err)
+		}
 	}
 
 	novoExe = filepath.Join(pastaInstalada, nomeExeInstalado)
@@ -74,6 +84,43 @@ func Relocar(cfg appconfig.Config) (novoExe string, err error) {
 	}
 
 	return novoExe, nil
+}
+
+func pastaExiste(caminho string) bool {
+	info, err := os.Stat(caminho)
+	return err == nil && info.IsDir()
+}
+
+func backupControleAntesDeAtualizar(pastaInstalada string) error {
+	backupDir := filepath.Join(pastaInstalada, "_backup_atualizacao_"+time.Now().Format("20060102_150405"))
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		return err
+	}
+
+	arquivos := []string{
+		"config.json",
+		"catalogo.csv",
+		".checkpoint-nfedist-nsu",
+		".checkpoint-adn-nsu",
+		"painel-debug.log",
+		"instalador-debug.log",
+		nomeExeInstalado,
+	}
+	for _, nome := range arquivos {
+		origem := filepath.Join(pastaInstalada, nome)
+		if _, err := os.Stat(origem); err != nil {
+			continue
+		}
+		destino := filepath.Join(backupDir, nome)
+		if err := copiarArquivo(origem, destino); err != nil {
+			return fmt.Errorf("copiar %s para backup: %w", nome, err)
+		}
+	}
+	return os.WriteFile(filepath.Join(backupDir, "LEIA-ME.txt"), []byte(
+		"Backup automático criado antes de atualizar o Coletor de Notas Fiscais.\r\n"+
+			"Para voltar ao estado anterior, copie os arquivos desta pasta para a pasta _Controle.\r\n"+
+			"Catálogo e checkpoints foram apenas copiados; a atualização não apaga esses arquivos.\r\n",
+	), 0o644)
 }
 
 func copiarArquivo(origem, destino string) error {

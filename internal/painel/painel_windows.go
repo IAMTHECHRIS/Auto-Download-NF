@@ -133,7 +133,7 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 			// "Buscar" de novo pra continuar de onde parou.
 			var diagnostico string
 			switch {
-			case resumoNFe.CStat != "" && resumoNFe.CStat != "137" && resumoNFe.CStat != "138" && !resumoNFe.AutoCorrigido:
+			case resumoNFe.CStat != "" && resumoNFe.CStat != "137" && resumoNFe.CStat != "138":
 				// rejeitado de verdade e não deu pra auto-corrigir — motivo
 				// real da SEFAZ, não escondido atrás de "sem notas novas".
 				diagnostico = fmt.Sprintf("⚠ NFEC/CT-e: a SEFAZ RECUSOU o pedido (cStat=%s: %s) — não é \"sem notas novas\", é rejeição de verdade. NÃO fique clicando \"Buscar\" repetidamente — se for bloqueio por reinício de NSU, pode levar até 1h pra liberar sozinho.", resumoNFe.CStat, resumoNFe.XMotivo)

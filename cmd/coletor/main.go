@@ -134,7 +134,9 @@ func encerrarAqui() bool {
 		return false
 	}
 
-	log.Printf("Instalado em: %s", novoExe)
+	log.Printf("Instalado/atualizado em: %s", novoExe)
+	log.Println("Atualização segura: catálogo e checkpoints da pasta _Controle são preservados;")
+	log.Println("quando já existe instalação, um backup automático é criado antes de trocar o programa.")
 	log.Println("Pode apagar o arquivo que você baixou (ex: da pasta Downloads) —")
 	log.Println("a partir de agora use o que ficou no caminho acima.")
 

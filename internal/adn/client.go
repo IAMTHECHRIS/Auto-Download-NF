@@ -9,9 +9,12 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"strings"
 	"time"
 
 	"io-nf-automation/internal/certload"
@@ -42,8 +45,11 @@ func NewClient(caminhoPfx, senhaPfx, tpAmb string) (*Client, error) {
 	}
 
 	transport := &http.Transport{
+		ForceAttemptHTTP2: false,
+		TLSNextProto:      map[string]func(string, *tls.Conn) http.RoundTripper{},
 		TLSClientConfig: &tls.Config{
 			Certificates: []tls.Certificate{cert},
+			MinVersion:   tls.VersionTLS12,
 		},
 	}
 
@@ -81,8 +87,10 @@ type DFeResponse struct {
 
 // BuscarLote pede o lote de documentos a partir do NSU informado. A API
 // devolve até 50 documentos por chamada; pra continuar, chame de novo com
-// o maior NSU do lote anterior. Faz retry com backoff em caso de 429 (rate
-// limit) — a API não documenta o limite exato, então esperamos progressivo.
+// o maior NSU do lote anterior. Faz retry com backoff em caso de 429 e em
+// falhas transitórias de rede/TLS (ex.: "tls: bad record MAC"). A ADN às
+// vezes derruba a conexão antes de devolver JSON; isso não significa "sem
+// NFS-e", significa que a página nem foi lida.
 func (c *Client) BuscarLote(nsu int) (DFeResponse, error) {
 	url := fmt.Sprintf("%s/DFe/%d", c.baseURL, nsu)
 
@@ -92,7 +100,12 @@ func (c *Client) BuscarLote(nsu int) (DFeResponse, error) {
 	for tentativa := 1; tentativa <= maxTentativas; tentativa++ {
 		resp, err := c.HTTPClient.Get(url)
 		if err != nil {
-			return DFeResponse{}, fmt.Errorf("chamar ADN: %w", err)
+			if tentativa < maxTentativas && erroTransitorio(err) {
+				time.Sleep(backoff)
+				backoff *= 2
+				continue
+			}
+			return DFeResponse{}, fmt.Errorf("chamar ADN após %d tentativa(s): %w", tentativa, err)
 		}
 
 		if resp.StatusCode == http.StatusTooManyRequests {
@@ -121,6 +134,23 @@ func (c *Client) BuscarLote(nsu int) (DFeResponse, error) {
 	}
 
 	return DFeResponse{}, fmt.Errorf("BuscarLote: não deveria chegar aqui")
+}
+
+func erroTransitorio(err error) bool {
+	if err == nil {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && (netErr.Timeout() || netErr.Temporary()) {
+		return true
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "tls: bad record mac") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "connection aborted") ||
+		strings.Contains(msg, "unexpected eof") ||
+		strings.Contains(msg, "eof")
 }
 
 // DecodeXML desfaz o base64+gzip do campo ArquivoXml e devolve o XML puro.
