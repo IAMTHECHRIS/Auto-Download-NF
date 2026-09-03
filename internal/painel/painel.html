@@ -911,11 +911,15 @@ async function clicarBuscarAgora() {
   const btns = [document.getElementById('btnBuscar')];
   const status1 = document.getElementById('status-busca');
   const status2 = document.getElementById('status-busca2');
+  const abaAtiva = document.querySelector('nav.abas button.ativa')?.dataset.aba || 'entrada';
+  const buscarSomenteNFSe = abaAtiva === 'saida' || (abaAtiva === 'entrada' && entradaState.tipo === 'NFES');
+  const funcaoBusca = buscarSomenteNFSe ? 'buscarNFSeAgora' : 'buscarNFeAgora';
+  const alvo = buscarSomenteNFSe ? 'NFS-e no ADN' : 'NFEC/CT-e na SEFAZ';
   btns.forEach(b => b.disabled = true);
-  [status1, status2].forEach(s => { s.className = 'status-busca-texto'; s.textContent = 'Buscando notas novas...'; });
-  mostrarCarregando('Buscando notas novas na SEFAZ... pode levar um tempinho, não feche o programa.');
+  [status1, status2].forEach(s => { s.className = 'status-busca-texto'; s.textContent = 'Buscando ' + alvo + '...'; });
+  mostrarCarregando('Buscando ' + alvo + '... não feche o programa.');
 
-  const resultado = await chamarAsync('buscarAgora');
+  const resultado = await chamarAsync(funcaoBusca);
   const r = JSON.parse(resultado);
   await carregarCatalogo();
   esconderCarregando();

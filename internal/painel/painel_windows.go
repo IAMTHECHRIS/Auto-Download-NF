@@ -131,22 +131,7 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 			// caminho antes de achar algo novo (MaxPaginas acabou). Sem
 			// distinguir isso o usuário fica sem saber se precisa só clicar
 			// "Buscar" de novo pra continuar de onde parou.
-			var diagnostico string
-			switch {
-			case resumoNFe.CStat != "" && resumoNFe.CStat != "137" && resumoNFe.CStat != "138":
-				// rejeitado de verdade e não deu pra auto-corrigir — motivo
-				// real da SEFAZ, não escondido atrás de "sem notas novas".
-				diagnostico = fmt.Sprintf("⚠ NFEC/CT-e: a SEFAZ RECUSOU o pedido (cStat=%s: %s) — não é \"sem notas novas\", é rejeição de verdade. NÃO fique clicando \"Buscar\" repetidamente — se for bloqueio por reinício de NSU, pode levar até 1h pra liberar sozinho.", resumoNFe.CStat, resumoNFe.XMotivo)
-			case resumoNFe.AutoCorrigido:
-				diagnostico = fmt.Sprintf("NFEC/CT-e: o checkpoint local estava desatualizado — a SEFAZ recusou (cStat=%s: %s), mas revelou o NSU certo (%d) e o programa já se auto-corrigiu e retomou dali.", resumoNFe.CStat, resumoNFe.XMotivo, resumoNFe.NSUAutoCorrigido)
-				if resumoNFe.Novas == 0 && !resumoNFe.EmDia() {
-					diagnostico += " Ainda tem mais pra varrer — clique em \"Buscar notas agora\" de novo."
-				}
-			case resumoNFe.Novas == 0 && resumoNFe.EmDia():
-				diagnostico = "NFEC/CT-e: sem notas novas — já está em dia com a SEFAZ."
-			case resumoNFe.Novas == 0 && resumoNFe.Paginas > 0:
-				diagnostico = fmt.Sprintf("NFEC/CT-e: sem notas novas nesta rodada, mas ainda tem mais pra varrer (parou no NSU %s de %s após %d página(s)) — clique em \"Buscar notas agora\" de novo pra continuar.", resumoNFe.UltNSU, resumoNFe.MaxNSU, resumoNFe.Paginas)
-			}
+			diagnostico := diagnosticoNFe(resumoNFe)
 			if resumoNFSe.ParouPorLimitePaginas {
 				if diagnostico != "" {
 					diagnostico += " "
@@ -159,6 +144,36 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 				diagnostico += diagNFSe
 			}
 
+			b, _ := json.Marshal(map[string]any{"ok": len(erros) == 0, "erros": erros, "diagnostico": diagnostico})
+			resolverAsync(id, string(b))
+		}()
+	})
+
+	w.Bind("buscarNFeAgora", func(id int) {
+		go func() {
+			debugLog.Printf(">> buscarNFeAgora")
+			var erros []string
+			resumoNFe, err := coletanfe.Run(cfg)
+			if err != nil {
+				erros = append(erros, "NFe: "+err.Error())
+			}
+			diagnostico := diagnosticoNFe(resumoNFe)
+			debugLog.Printf("<< buscarNFeAgora nfe=%+v erros=%v", resumoNFe, erros)
+			b, _ := json.Marshal(map[string]any{"ok": len(erros) == 0, "erros": erros, "diagnostico": diagnostico})
+			resolverAsync(id, string(b))
+		}()
+	})
+
+	w.Bind("buscarNFSeAgora", func(id int) {
+		go func() {
+			debugLog.Printf(">> buscarNFSeAgora")
+			var erros []string
+			resumoNFSe, err := coletansfe.Run(cfg)
+			if err != nil {
+				erros = append(erros, "NFSe: "+err.Error())
+			}
+			diagnostico := diagnosticoNFSe(resumoNFSe)
+			debugLog.Printf("<< buscarNFSeAgora nfse=%+v erros=%v", resumoNFSe, erros)
 			b, _ := json.Marshal(map[string]any{"ok": len(erros) == 0, "erros": erros, "diagnostico": diagnostico})
 			resolverAsync(id, string(b))
 		}()
@@ -695,6 +710,25 @@ func diagnosticoNFSe(resumo coletansfe.Resumo) string {
 		return strings.Join(partes, "; ") + ". Nenhuma NFS-e nova veio para este CNPJ/ambiente/checkpoint."
 	}
 	return strings.Join(partes, "; ") + "."
+}
+
+func diagnosticoNFe(resumo coletanfe.Resumo) string {
+	switch {
+	case resumo.CStat != "" && resumo.CStat != "137" && resumo.CStat != "138":
+		return fmt.Sprintf("⚠ NFEC/CT-e: a SEFAZ RECUSOU o pedido (cStat=%s: %s) — não é \"sem notas novas\", é rejeição de verdade. NÃO fique clicando \"Buscar\" repetidamente — se for bloqueio por reinício de NSU, pode levar até 1h pra liberar sozinho.", resumo.CStat, resumo.XMotivo)
+	case resumo.AutoCorrigido:
+		diagnostico := fmt.Sprintf("NFEC/CT-e: o checkpoint local estava desatualizado — a SEFAZ recusou (cStat=%s: %s), mas revelou o NSU certo (%d) e o programa já se auto-corrigiu e retomou dali.", resumo.CStat, resumo.XMotivo, resumo.NSUAutoCorrigido)
+		if resumo.Novas == 0 && !resumo.EmDia() {
+			diagnostico += " Ainda tem mais pra varrer — clique em \"Buscar notas agora\" de novo."
+		}
+		return diagnostico
+	case resumo.Novas == 0 && resumo.EmDia():
+		return "NFEC/CT-e: sem notas novas — já está em dia com a SEFAZ."
+	case resumo.Novas == 0 && resumo.Paginas > 0:
+		return fmt.Sprintf("NFEC/CT-e: sem notas novas nesta rodada, mas ainda tem mais pra varrer (parou no NSU %s de %s após %d página(s)) — clique em \"Buscar notas agora\" de novo pra continuar.", resumo.UltNSU, resumo.MaxNSU, resumo.Paginas)
+	default:
+		return ""
+	}
 }
 
 func valorOuTraco(s string) string {
