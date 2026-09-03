@@ -46,6 +46,12 @@ const geradorDANFE = "I.O NF Automation"
 // rodada.
 const esperaEntreUpgrades = 3 * time.Second
 
+// maxUpgradesPorRodada limita as consultas avulsas por chave (consChNFe)
+// usadas para transformar resNFe em procNFe/DANFE. A distribuição por lote
+// pode trazer dezenas de resumos de uma vez; tentar completar todos na mesma
+// execução estoura a cota de 20 consultas/hora e causa cStat=656.
+const maxUpgradesPorRodada = 15
+
 // docEmitente pega o CNPJ/CPF do emitente do próprio resNFe; se por algum
 // motivo o campo não vier, cai pro CNPJ embutido na chave de acesso (que
 // sempre existe, é parte do layout dos 44 dígitos).
@@ -88,7 +94,7 @@ func gerarDANFEAoLado(caminhoXML string, xmlBytes []byte) {
 // DANFE, como já era o comportamento). ultimaConsulta é compartilhada entre
 // todas as chamadas de uma mesma rodada de Run(), pra respeitar
 // esperaEntreUpgrades mesmo com várias notas resumidas na mesma página.
-func upgradarParaCompleto(client *nfedist.Client, cfg appconfig.Config, chave string, ultimaConsulta *time.Time) (document.Document, []byte, bool) {
+func upgradarParaCompleto(client *nfedist.Client, cfg appconfig.Config, chave string, ultimaConsulta *time.Time) (document.Document, []byte, bool, bool) {
 	if !ultimaConsulta.IsZero() {
 		if espera := esperaEntreUpgrades - time.Since(*ultimaConsulta); espera > 0 {
 			time.Sleep(espera)
@@ -99,15 +105,15 @@ func upgradarParaCompleto(client *nfedist.Client, cfg appconfig.Config, chave st
 	res, err := client.BuscarPorChave(cfg.CUFAutor, cfg.CNPJ, chave)
 	if err != nil {
 		log.Printf("[NFe]   upgrade pra completo (chave %s): consulta falhou: %v — mantendo resumo, sem DANFE", chave, err)
-		return document.Document{}, nil, false
+		return document.Document{}, nil, false, false
 	}
 	if res.CStat != "138" && res.CStat != "137" {
 		log.Printf("[NFe]   upgrade pra completo (chave %s): SEFAZ recusou (cStat=%s: %s) — mantendo resumo, sem DANFE", chave, res.CStat, res.XMotivo)
-		return document.Document{}, nil, false
+		return document.Document{}, nil, false, res.CStat == "656"
 	}
 	if len(res.Docs) == 0 {
 		log.Printf("[NFe]   upgrade pra completo (chave %s): consulta veio vazia — mantendo resumo, sem DANFE", chave)
-		return document.Document{}, nil, false
+		return document.Document{}, nil, false, false
 	}
 
 	docZip := res.Docs[0]
@@ -116,20 +122,20 @@ func upgradarParaCompleto(client *nfedist.Client, cfg appconfig.Config, chave st
 		// não somos o destinatário direto) — não é erro, só não dá pra
 		// gerar DANFE dessa nota.
 		log.Printf("[NFe]   upgrade pra completo (chave %s): SEFAZ ainda devolveu %s, não procNFe — mantendo resumo, sem DANFE", chave, docZip.Schema)
-		return document.Document{}, nil, false
+		return document.Document{}, nil, false, false
 	}
 
 	xmlBytes, err := nfedist.DecodeXML(docZip)
 	if err != nil {
 		log.Printf("[NFe]   upgrade pra completo (chave %s): erro ao decodificar: %v — mantendo resumo, sem DANFE", chave, err)
-		return document.Document{}, nil, false
+		return document.Document{}, nil, false, false
 	}
 	doc, err := document.ParseNFe(xmlBytes)
 	if err != nil {
 		log.Printf("[NFe]   upgrade pra completo (chave %s): erro ao parsear procNFe: %v — mantendo resumo, sem DANFE", chave, err)
-		return document.Document{}, nil, false
+		return document.Document{}, nil, false, false
 	}
-	return doc, xmlBytes, true
+	return doc, xmlBytes, true, false
 }
 
 // BuscarUma pede UMA nota específica pela chave de acesso (44 dígitos) —
@@ -282,6 +288,8 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 
 	var resumos, eventos, outrosSchemas, erros, cancelamentos, semReferencia int
 	var ultimaConsultaUpgrade time.Time
+	var upgradesTentados int
+	var upgradesBloqueados bool
 
 	type registro struct {
 		caminho string
@@ -398,12 +406,19 @@ func Run(cfg appconfig.Config) (Resumo, error) {
 				// pulam a consulta extra.
 				xmlParaGravar := xmlBytes
 				schemaGravado := docZip.Schema
-				if !cancelada {
-					if completo, xmlCompleto, ok := upgradarParaCompleto(client, cfg, chave, &ultimaConsultaUpgrade); ok {
+				if !cancelada && !upgradesBloqueados && upgradesTentados < maxUpgradesPorRodada {
+					upgradesTentados++
+					if completo, xmlCompleto, ok, bloqueado := upgradarParaCompleto(client, cfg, chave, &ultimaConsultaUpgrade); ok {
 						doc = completo
 						xmlParaGravar = xmlCompleto
 						schemaGravado = "procNFe_v4.00.xsd"
+					} else if bloqueado {
+						upgradesBloqueados = true
+						log.Printf("[NFe]   limite/bloqueio SEFAZ detectado no upgrade por chave — upgrades pausados até a próxima execução; a coleta por lote continua salvando resumos")
 					}
+				} else if !cancelada && upgradesTentados >= maxUpgradesPorRodada && !upgradesBloqueados {
+					upgradesBloqueados = true
+					log.Printf("[NFe]   limite local de %d upgrades por rodada atingido — próximos resumos serão salvos sem DANFE e podem ser completados em outra execução", maxUpgradesPorRodada)
 				}
 
 				caminho, err := organizer.PlaceDocumentPlano(outDir, doc, ".xml", xmlParaGravar)
