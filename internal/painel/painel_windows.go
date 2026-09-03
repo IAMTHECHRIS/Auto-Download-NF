@@ -666,7 +666,7 @@ func adicionarAoZip(zw *zip.Writer, caminho string) error {
 
 func diagnosticoNFSe(resumo coletansfe.Resumo) string {
 	if resumo.Paginas == 0 {
-		return "NFS-e: a consulta ao ADN não chegou a completar nenhuma página; veja o erro acima."
+		return "NFS-e: a consulta ao ADN falhou antes de completar qualquer página. Isso é problema de comunicação/TLS com o serviço nacional, não significa ausência de nota. Não clique repetidamente; guarde o log e rode o teste técnico de comunicação."
 	}
 
 	totalUtil := resumo.Recebidas + resumo.Emitidas + resumo.Cancelamentos
