@@ -81,6 +81,13 @@ checkpoint em disco (`internal/nfedist/checkpoint.go`) existe justamente pra
 nunca cometer esse erro. A consulta avulsa por chave (`consChNFe`, usada em
 "Buscar por chave" no painel) é independente disso — não mexe no checkpoint.
 
+Para operação em produção, testes com pasta limpa e recuperação de XMLs
+apagados, ver:
+
+```text
+docs/OPERACAO-CHECKPOINTS-E-RECUPERACAO.md
+```
+
 ## Build (desenvolvimento)
 
 ```bash
