@@ -12,3 +12,7 @@ func garantirTarefa(horario string) error {
 func removerTarefa() error {
 	return nil
 }
+
+func statusTarefa() (string, bool, error) {
+	return "", false, nil
+}

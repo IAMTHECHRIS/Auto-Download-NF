@@ -53,7 +53,8 @@ trata de forma diferente, e pro volume baixo de cupom não compensou construir
    - **Verificar cópia** — compara com uma pasta de destino (ex: Google
      Drive), mostra o que falta copiar, deixa selecionar e gerar um `.zip`.
    - **Configuração** — troca CNPJ/estado/certificado/pasta sem refazer
-     tudo, e tem uma opção de desinstalação completa.
+     tudo, cria/verifica a tarefa agendada, configura notificação por
+     e-mail e tem uma opção de desinstalação completa.
 
 Veja `dist/LEIA-ME.txt` (gerado junto do build) pra descrição completa.
 
@@ -67,7 +68,10 @@ Veja `dist/LEIA-ME.txt` (gerado junto do build) pra descrição completa.
    num catálogo (`_Controle/catalogo.csv`) que alimenta o painel
 5. Cancelamentos são detectados e o arquivo original é renomeado no lugar
    com uma tag de status — não cria pasta separada
-6. Uma tarefa agendada roda a coleta diariamente (mais um reforço 2 min
+6. PDFs são gerados quando o XML contém dados suficientes (NF-e completa);
+   se houver notificação SMTP configurada, documentos novos são enviados por
+   e-mail com XML e PDF quando disponível
+7. Uma tarefa agendada roda a coleta diariamente (mais um reforço 2 min
    após o PC ligar, caso o horário normal seja perdido) — com trava
    própria pra nunca coletar mais de uma vez de verdade no mesmo dia
 

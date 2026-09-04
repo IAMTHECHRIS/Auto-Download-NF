@@ -390,12 +390,30 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 	})
 
 	w.Bind("carregarConfiguracao", func() string {
+		emailPorta := cfg.EmailPorta
+		if emailPorta == 0 {
+			emailPorta = 587
+		}
+		emailDe := cfg.EmailDe
+		if strings.TrimSpace(emailDe) == "" {
+			emailDe = "notas@thesis.eng.br"
+		}
+		emailPara := cfg.EmailPara
+		if strings.TrimSpace(emailPara) == "" {
+			emailPara = "notas@thesis.eng.br"
+		}
 		b, _ := json.Marshal(map[string]any{
 			"cnpj":            cfg.CNPJ,
 			"cUFAutor":        cfg.CUFAutor,
 			"certificado_pfx": cfg.CertificadoPfx,
 			"pasta_saida":     cfg.PastaSaida,
 			"ambiente":        cfg.Ambiente,
+			"email_ativo":     cfg.EmailAtivo,
+			"email_smtp":      cfg.EmailSMTP,
+			"email_porta":     emailPorta,
+			"email_usuario":   cfg.EmailUsuario,
+			"email_de":        emailDe,
+			"email_para":      emailPara,
 		})
 		return string(b)
 	})
@@ -408,6 +426,13 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 			CertificadoSenha string `json:"certificado_senha"`
 			PastaSaida       string `json:"pasta_saida"`
 			Ambiente         string `json:"ambiente"`
+			EmailAtivo       bool   `json:"email_ativo"`
+			EmailSMTP        string `json:"email_smtp"`
+			EmailPorta       int    `json:"email_porta"`
+			EmailUsuario     string `json:"email_usuario"`
+			EmailSenha       string `json:"email_senha"`
+			EmailDe          string `json:"email_de"`
+			EmailPara        string `json:"email_para"`
 		}
 		if err := json.Unmarshal([]byte(cfgJSON), &entrada); err != nil {
 			return respostaErro("dados inválidos: " + err.Error())
@@ -419,8 +444,17 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 		novoCfg.CertificadoPfx = entrada.CertificadoPfx
 		novoCfg.PastaSaida = entrada.PastaSaida
 		novoCfg.Ambiente = entrada.Ambiente
+		novoCfg.EmailAtivo = entrada.EmailAtivo
+		novoCfg.EmailSMTP = entrada.EmailSMTP
+		novoCfg.EmailPorta = entrada.EmailPorta
+		novoCfg.EmailUsuario = entrada.EmailUsuario
+		novoCfg.EmailDe = entrada.EmailDe
+		novoCfg.EmailPara = entrada.EmailPara
 		if strings.TrimSpace(entrada.CertificadoSenha) != "" {
 			novoCfg.CertificadoSenha = entrada.CertificadoSenha
+		}
+		if strings.TrimSpace(entrada.EmailSenha) != "" {
+			novoCfg.EmailSenha = entrada.EmailSenha
 		}
 
 		if _, err := certload.FromPFXValidado(novoCfg.CertificadoPfx, novoCfg.CertificadoSenha); err != nil {
@@ -441,6 +475,24 @@ func Abrir(cfg appconfig.Config) (bool, error) {
 			aviso = " (arquivos já baixados continuam onde estavam — isso só vale pra notas novas)"
 		}
 		return respostaOK("Configuração salva." + aviso)
+	})
+
+	w.Bind("garantirTarefaPainel", func() string {
+		debugLog.Printf(">> garantirTarefaPainel")
+		if err := wintask.EnsureDailyTask("08:00"); err != nil {
+			debugLog.Printf("<< garantirTarefaPainel erro=%v", err)
+			return respostaErro(err.Error())
+		}
+		status, existe, err := wintask.Status()
+		if err != nil {
+			debugLog.Printf("<< garantirTarefaPainel statusErro=%v", err)
+			return respostaErro(err.Error())
+		}
+		if !existe {
+			return respostaErro("tarefa não encontrada depois da criação")
+		}
+		debugLog.Printf("<< garantirTarefaPainel ok status=%s", status)
+		return respostaOK("Tarefa agendada criada/verificada:\n" + status)
 	})
 
 	w.Bind("abrirPasta", func(caminho string) {

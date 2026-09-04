@@ -21,6 +21,13 @@ func EnsureDailyTask(horario string) error {
 	return garantirTarefa(horario)
 }
 
+func Status() (string, bool, error) {
+	if runtime.GOOS != "windows" {
+		return "", false, nil
+	}
+	return statusTarefa()
+}
+
 // RemoverTarefa apaga a tarefa agendada, se existir — usada pelo botão
 // "Desinstalar" do painel, pra quem quer parar de usar o programa de
 // verdade (não só fechar a janela) e não deixar nada rodando sozinho no

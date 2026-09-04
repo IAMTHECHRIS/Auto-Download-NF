@@ -91,6 +91,25 @@ if ($t) { Write-Output $t.Actions[0].Execute }
 	return caminho, true
 }
 
+func statusTarefa() (string, bool, error) {
+	saida, err := rodarPowerShell(fmt.Sprintf(`
+$t = Get-ScheduledTask -TaskName %s -ErrorAction SilentlyContinue
+if (-not $t) { exit 0 }
+$info = Get-ScheduledTaskInfo -TaskName %s
+Write-Output ("Execute=" + $t.Actions[0].Execute)
+Write-Output ("Arguments=" + $t.Actions[0].Arguments)
+Write-Output ("State=" + $t.State)
+Write-Output ("LastRunTime=" + $info.LastRunTime)
+Write-Output ("LastTaskResult=" + $info.LastTaskResult)
+Write-Output ("NextRunTime=" + $info.NextRunTime)
+`, aspasPS(nomeTarefa), aspasPS(nomeTarefa)))
+	if err != nil {
+		return "", false, err
+	}
+	saida = strings.TrimSpace(saida)
+	return saida, saida != "", nil
+}
+
 func removerTarefa() error {
 	// Checa antes via Get-ScheduledTask (mesma função que já uso pra achar
 	// o caminho registrado) em vez de tentar reconhecer a mensagem de erro

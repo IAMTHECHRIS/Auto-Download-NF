@@ -38,6 +38,14 @@ type Config struct {
 	// continuam se comportando exatamente como hoje. Ver EhHomologacao() e
 	// PastaEfetiva().
 	Ambiente string `json:"ambiente"`
+
+	EmailAtivo   bool   `json:"email_ativo"`
+	EmailSMTP    string `json:"email_smtp"`
+	EmailPorta   int    `json:"email_porta"`
+	EmailUsuario string `json:"email_usuario"`
+	EmailSenha   string `json:"email_senha"`
+	EmailDe      string `json:"email_de"`
+	EmailPara    string `json:"email_para"`
 }
 
 const (

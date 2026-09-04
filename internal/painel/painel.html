@@ -431,6 +431,57 @@
       </div>
 
       <button class="btn-principal" onclick="clicarSalvarConfiguracao()">Salvar configuração</button>
+      <hr style="border-color: var(--border); margin: 22px 0 14px;">
+
+      <div class="campo">
+        <label>Rotina automática</label>
+        <p class="explicacao" style="margin-top:6px;">
+          Cria ou corrige a tarefa do Agendador do Windows para rodar todo dia
+          às 08:00 e também 2 minutos após o servidor ligar.
+        </p>
+        <button class="btn-secundario" onclick="clicarGarantirTarefa()">Criar/verificar tarefa agendada</button>
+        <div class="status-form" id="status-tarefa"></div>
+      </div>
+
+      <hr style="border-color: var(--border); margin: 22px 0 14px;">
+
+      <div class="campo">
+        <label>Notificação por e-mail</label>
+        <label style="display:flex; align-items:center; gap:7px; font-size:13px; font-weight:400; text-transform:none; color:var(--text);">
+          <input type="checkbox" id="cfgEmailAtivo"> Enviar e-mail quando chegarem documentos novos
+        </label>
+      </div>
+
+      <div class="campo">
+        <label>SMTP</label>
+        <input type="text" id="cfgEmailSmtp" placeholder="smtp.seudominio.com.br">
+      </div>
+
+      <div class="campo">
+        <label>Porta SMTP</label>
+        <input type="number" id="cfgEmailPorta" placeholder="587">
+      </div>
+
+      <div class="campo">
+        <label>Usuário SMTP</label>
+        <input type="text" id="cfgEmailUsuario" placeholder="notas@thesis.eng.br">
+      </div>
+
+      <div class="campo">
+        <label>Senha SMTP / senha de app (deixe em branco pra manter)</label>
+        <input type="password" id="cfgEmailSenha" placeholder="••••••••">
+      </div>
+
+      <div class="campo">
+        <label>Remetente</label>
+        <input type="email" id="cfgEmailDe" placeholder="notas@thesis.eng.br">
+      </div>
+
+      <div class="campo">
+        <label>Destino</label>
+        <input type="email" id="cfgEmailPara" placeholder="notas@thesis.eng.br">
+      </div>
+
       <button class="btn-link" onclick="clicarReconfigurar()">Refazer configuração do zero…</button>
       <div class="status-form" id="status-config"></div>
 
@@ -1216,6 +1267,12 @@ async function atualizarFormConfiguracao() {
   document.getElementById('cfgPfx').value = c.certificado_pfx || '';
   document.getElementById('cfgPastaSaida').value = c.pasta_saida || '';
   document.getElementById('cfgAmbiente').value = c.ambiente || '';
+  document.getElementById('cfgEmailAtivo').checked = !!c.email_ativo;
+  document.getElementById('cfgEmailSmtp').value = c.email_smtp || '';
+  document.getElementById('cfgEmailPorta').value = c.email_porta || 587;
+  document.getElementById('cfgEmailUsuario').value = c.email_usuario || 'notas@thesis.eng.br';
+  document.getElementById('cfgEmailDe').value = c.email_de || 'notas@thesis.eng.br';
+  document.getElementById('cfgEmailPara').value = c.email_para || 'notas@thesis.eng.br';
   atualizarAvisoAmbiente();
 }
 
@@ -1253,6 +1310,13 @@ async function clicarSalvarConfiguracao() {
     certificado_senha: document.getElementById('cfgSenha').value,
     pasta_saida: document.getElementById('cfgPastaSaida').value.trim(),
     ambiente: document.getElementById('cfgAmbiente').value,
+    email_ativo: document.getElementById('cfgEmailAtivo').checked,
+    email_smtp: document.getElementById('cfgEmailSmtp').value.trim(),
+    email_porta: Number(document.getElementById('cfgEmailPorta').value || 587),
+    email_usuario: document.getElementById('cfgEmailUsuario').value.trim(),
+    email_senha: document.getElementById('cfgEmailSenha').value,
+    email_de: document.getElementById('cfgEmailDe').value.trim(),
+    email_para: document.getElementById('cfgEmailPara').value.trim(),
   };
 
   status.className = 'status-form';
@@ -1265,11 +1329,22 @@ async function clicarSalvarConfiguracao() {
     status.className = 'status-form ok';
     status.textContent = r.mensagem;
     document.getElementById('cfgSenha').value = '';
+    document.getElementById('cfgEmailSenha').value = '';
     atualizarAvisoAmbiente();
   } else {
     status.className = 'status-form erro';
     status.textContent = r.erro;
   }
+}
+
+async function clicarGarantirTarefa() {
+  const status = document.getElementById('status-tarefa');
+  status.className = 'status-form';
+  status.textContent = 'Criando/verificando tarefa agendada...';
+  const resultado = await window.garantirTarefaPainel();
+  const r = JSON.parse(resultado);
+  status.className = 'status-form ' + (r.ok ? 'ok' : 'erro');
+  status.textContent = r.ok ? r.mensagem : r.erro;
 }
 
 function clicarReconfigurar() {

@@ -144,10 +144,88 @@ Se ainda faltar, rodar novamente depois.
 1. Escolher uma pasta definitiva no servidor.
 2. Rodar o instalador uma vez.
 3. Conferir se `_Controle` foi criado.
-4. Nunca apagar `_Controle`.
-5. Não limpar checkpoint manualmente.
-6. Se quiser limpar XMLs de teste, fazer backup antes.
-7. Para produção, deixar a tarefa agendada buscar novas notas.
+4. Abrir o painel no servidor e usar:
+
+```text
+Configuração → Criar/verificar tarefa agendada
+```
+
+5. Conferir no próprio painel se a tarefa aponta para o executável instalado
+   dentro de `_Controle`.
+6. Nunca apagar `_Controle`.
+7. Não limpar checkpoint manualmente.
+8. Se quiser limpar XMLs de teste, fazer backup antes.
+9. Para produção, deixar a tarefa agendada buscar novas notas.
+
+## Agendamento no Windows
+
+O coletor cria uma tarefa chamada:
+
+```text
+ColetaNotasFiscaisAutomatica
+```
+
+Ela roda:
+
+- diariamente às 08:00;
+- 2 minutos após o Windows iniciar.
+
+Quando executada pela tarefa, o programa roda com o argumento:
+
+```text
+--agendado
+```
+
+Nesse modo ele não abre painel: apenas coleta notas, atualiza catálogo,
+gera PDFs quando possível e envia notificação se configurada.
+
+Se a tarefa não aparecer no Agendador do Windows, abrir o painel do coletor
+no servidor e clicar em:
+
+```text
+Configuração → Criar/verificar tarefa agendada
+```
+
+Esse botão força a criação/correção e mostra no painel o executável registrado,
+o estado, último resultado e próxima execução.
+
+## PDF e notificação por e-mail
+
+O coletor envia e-mail somente se a configuração SMTP estiver ativa.
+
+Campos configuráveis no painel:
+
+```text
+Configuração → Notificação por e-mail
+```
+
+Conta operacional prevista para a THESIS:
+
+```text
+notas@thesis.eng.br
+```
+
+O e-mail é enviado quando aparecem documentos novos no catálogo após uma
+coleta agendada. O programa compara o catálogo antes/depois da rodada.
+
+Anexos:
+
+- XML sempre que o arquivo existir;
+- PDF quando existir ao lado do XML com o mesmo nome-base.
+
+Exemplo:
+
+```text
+FORNECEDOR_260904_NFEC 123_R$ 100,00.xml
+FORNECEDOR_260904_NFEC 123_R$ 100,00.pdf
+```
+
+Status atual:
+
+- NF-e compra com XML completo (`procNFe`) gera DANFE/PDF automaticamente.
+- NF-e resumo (`resNFe`) pode não gerar PDF porque não tem dados completos.
+- NFS-e ainda não tem DANFSe/PDF implementado; nesse caso o e-mail segue
+  com XML apenas.
 
 ## Situação da THESIS após o teste de 2026-09-04
 

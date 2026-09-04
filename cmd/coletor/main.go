@@ -13,9 +13,11 @@ import (
 	"time"
 
 	"io-nf-automation/internal/appconfig"
+	"io-nf-automation/internal/catalogo"
 	"io-nf-automation/internal/coletanfe"
 	"io-nf-automation/internal/coletansfe"
 	"io-nf-automation/internal/instalador"
+	"io-nf-automation/internal/notifier"
 	"io-nf-automation/internal/painel"
 	"io-nf-automation/internal/relocador"
 	"io-nf-automation/internal/wintask"
@@ -176,6 +178,11 @@ func rodarColeta(cfg appconfig.Config) {
 		return
 	}
 
+	catalogoAntes, err := catalogo.Listar(cfg.PastaEfetiva())
+	if err != nil {
+		log.Printf("aviso: não consegui ler catálogo antes da coleta: %v", err)
+	}
+
 	teveErro := false
 	resumoNFe, err := coletanfe.Run(cfg)
 	if err != nil {
@@ -203,9 +210,45 @@ func rodarColeta(cfg appconfig.Config) {
 		return
 	}
 
+	catalogoDepois, err := catalogo.Listar(cfg.PastaEfetiva())
+	if err != nil {
+		log.Printf("aviso: não consegui ler catálogo depois da coleta para notificação: %v", err)
+	} else if novos := documentosNovos(catalogoAntes, catalogoDepois); len(novos) > 0 {
+		if err := notifier.EnviarNovosDocumentos(cfg, novos); err != nil {
+			log.Printf("aviso: não consegui enviar e-mail de novas notas: %v", err)
+		} else {
+			log.Printf("e-mail de novas notas enviado: %d documento(s)", len(novos))
+		}
+	}
+
 	if err := os.WriteFile(marcador, []byte(hoje), 0o644); err != nil {
 		log.Printf("aviso: não consegui gravar marcador de última coleta: %v", err)
 	}
+}
+
+func documentosNovos(antes, depois []catalogo.Entrada) []notifier.Documento {
+	vistos := make(map[string]bool, len(antes))
+	for _, e := range antes {
+		chave := strings.TrimSpace(e.Chave)
+		if chave != "" {
+			vistos[chave] = true
+		}
+	}
+	var novos []notifier.Documento
+	for _, e := range depois {
+		chave := strings.TrimSpace(e.Chave)
+		if chave == "" || vistos[chave] {
+			continue
+		}
+		novos = append(novos, notifier.Documento{
+			Tipo:       e.Tipo,
+			Fornecedor: e.Fornecedor,
+			Numero:     e.Numero,
+			Valor:      e.Valor,
+			CaminhoXML: e.Caminho,
+		})
+	}
+	return novos
 }
 
 func nfeRejeitada(resumo coletanfe.Resumo) bool {
